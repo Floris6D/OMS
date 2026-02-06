@@ -1,0 +1,3 @@
+# Grade Game: Action 0 = Confess, Action 1 = Deny
+6,6 9,0
+0,9 7,7

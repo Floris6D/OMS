@@ -1,0 +1,3 @@
+# Chicken: Action 0 = Stop, Action 1 = Drive
+1,1 0,2
+2,0 -10,-10
