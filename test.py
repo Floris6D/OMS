@@ -153,6 +153,17 @@ def gen_general():
     return A, B
 
 
+def gen_symmetric_shuffle():
+    a, b, c, d = rand(0, 10), rand(0, 10), rand(0, 10), rand(0, 10)
+    # get two random orders of the payoffs
+    order1 = np.random.permutation([a, b, c, d])
+    order2 = np.random.permutation([a, b, c, d])
+    A = np.array([[order1[0], order1[1]],
+                  [order1[2], order1[3]]])
+    B = np.array([[order2[0], order2[1]],
+                  [order2[2], order2[3]]])
+    return A, B
+
 # -----------------------------
 # Unified interface
 # -----------------------------
@@ -165,7 +176,8 @@ generators = {
         "prisoners_dilemma": gen_prisoners_dilemma,
         "deadlock": gen_deadlock,
         "harmony": gen_harmony,
-        "general": gen_general
+        "general": gen_general,
+        "symetric_shuffle": gen_symmetric_shuffle,
     }
 
 def generate_game(game_type):
@@ -191,8 +203,8 @@ def summary_test(result):
 # -----------------------------
 
 if __name__ == "__main__":
-    N=10**3
-    for gametype in generators:
+    N=1
+    for gametype in ["symetric_shuffle"]:
         results = []
         print(f"--- Testing game type: {gametype} ---")
         for i in range(N):

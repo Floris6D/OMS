@@ -429,7 +429,10 @@ class MyAgent(Agent):
 		Returns a string like 'prisoners_dilemma', 'chicken', 'coordination', etc.
 		"""
 		# TODO: Implement game classification
-		if verbose: print(self.analysis)
+		if verbose:
+			print("Game analysis:")
+			for key, value in self.analysis.items():
+				print(f"{key}: {value}")
 		# Consider: dominant strategies, Nash equilibria, Pareto efficiency
 		if len(self.analysis["pure_nash"])>=1: 
 			#could be, prisonerd dillema, deadlock
