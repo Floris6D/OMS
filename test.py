@@ -1,0 +1,207 @@
+from team_14 import MyAgent
+
+
+import numpy as np
+import random
+
+
+# -----------------------------
+# Utility
+# -----------------------------
+
+def rand(a=0, b=10):
+    return random.uniform(a, b)
+
+
+# -----------------------------
+# 1️⃣ Zero-Sum (Matching Pennies type)
+# A + B = 0, no pure Nash, mixed only
+# -----------------------------
+
+def gen_zero_sum():
+    x = rand(1, 5)
+    y = rand(1, 5)
+
+    A = np.array([[ x, -x],
+                  [-y,  y]])
+
+    B = -A
+    return A, B
+
+
+# -----------------------------
+# 2️⃣ Mixed-only (non-zero-sum)
+# No pure NE, one mixed NE
+# -----------------------------
+def gen_mixed_only():
+    """
+    Generates a 2x2 mixed-only game (no pure NE, one mixed NE)
+    using best-response construction.
+    """
+    high = rand(5, 10)
+    low = rand(0, 3)
+
+    A = np.array([[high, low],[low, high]])
+    B = np.array([[low, high],[high, low]])
+    return A, B
+
+# -----------------------------
+# 3️⃣ Coordination
+# Two diagonal pure Nash equilibria
+# -----------------------------
+
+def gen_coordination():
+    high1 = rand(5, 10)
+    high2 = rand(5, 10)
+    low = rand(0, 3)
+
+    A = np.array([[high1, low],
+                  [low,  high2]])
+
+    B = np.array([[high1, low],
+                  [low,  high2]])
+
+    return A, B
+
+
+# -----------------------------
+# 4️⃣ Chicken (Anti-coordination)
+# Two off-diagonal pure Nash equilibria
+# -----------------------------
+
+def gen_anti_coordination():
+    win = rand(5, 10)
+    lose = rand(1, 3)
+    crash = rand(-5, -1)
+
+    A = np.array([[crash, win],
+                  [lose,  0]])
+
+    B = np.array([[crash, lose],
+                  [win,   0]])
+
+    return A, B
+
+
+# -----------------------------
+# 5️⃣ Prisoner's Dilemma
+# Dominant strategy for both, inefficient equilibrium
+# T > R > P > S
+# -----------------------------
+
+def gen_prisoners_dilemma():
+    T = rand(6, 10)
+    R = rand(4, 5)
+    P = rand(2, 3)
+    S = rand(0, 1)
+
+    A = np.array([[R, S],
+                  [T, P]])
+
+    B = np.array([[R, T],
+                  [S, P]])
+
+    return A, B
+
+
+# -----------------------------
+# 6️⃣ Deadlock
+# Dominant strategy for both, efficient equilibrium
+# -----------------------------
+
+def gen_deadlock():
+    best = rand(6, 10)
+    mid = rand(3, 5)
+    low = rand(0, 2)
+
+    A = np.array([[mid, low],
+                  [best, best]])
+
+    B = np.array([[mid, best],
+                  [low, best]])
+
+    return A, B
+
+
+# -----------------------------
+# 7️⃣ Harmony
+# Single pure Nash, Pareto efficient, no dilemma
+# -----------------------------
+
+def gen_harmony():
+    best = rand(6, 10)
+    alt = rand(3, 5)
+    low = rand(0, 2)
+
+    A = np.array([[best, alt],
+                  [low,  alt]])
+
+    B = np.array([[best, low],
+                  [alt,  alt]])
+
+    return A, B
+
+
+# -----------------------------
+# 8️⃣ General 2x2 (fallback)
+# Completely random
+# -----------------------------
+
+def gen_general():
+    A = np.random.uniform(0, 10, (2, 2))
+    B = np.random.uniform(0, 10, (2, 2))
+    return A, B
+
+
+# -----------------------------
+# Unified interface
+# -----------------------------
+
+generators = {
+        "zero_sum": gen_zero_sum,
+        "mixed_only": gen_mixed_only,
+        "coordination": gen_coordination,
+        "anti_coordination": gen_anti_coordination,
+        "prisoners_dilemma": gen_prisoners_dilemma,
+        "deadlock": gen_deadlock,
+        "harmony": gen_harmony,
+        "general": gen_general
+    }
+
+def generate_game(game_type):
+    if game_type not in generators:
+        raise ValueError(f"Unknown game type: {game_type}")
+    return generators[game_type]()
+
+
+
+def combine_AB(A, B):
+    #combining the matrices such that the 3rd dimension correpsonds to the player/matrix
+    return np.stack((A, B), axis=-1)
+
+
+def summary_test(result):
+    from collections import Counter
+    counts = Counter(result)
+    print("Classification Summary:")
+    for classification, count in counts.items():
+        print(f"{classification}: {count}")
+# -----------------------------
+# Example usage
+# -----------------------------
+
+if __name__ == "__main__":
+    N=10**3
+    for gametype in generators:
+        results = []
+        print(f"--- Testing game type: {gametype} ---")
+        for i in range(N):
+            A, B = generate_game(gametype)
+            game = combine_AB(A, B) 
+            if N==1: print(f"Game:\nA:\n{A}\nB:\n{B}")
+            agent = MyAgent(0, game)
+            results.append(agent._classify_game(verbose= True if N==1 else False))
+        summary_test(results)
+        print(1*"\n")
+
+

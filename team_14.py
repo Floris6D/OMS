@@ -132,7 +132,7 @@ def analyze_game(A: np.ndarray, B: np.ndarray) -> dict:
 	-------
 	dict
 		Completed analysis dictionary with all fields filled.
-		See `create_empty_analysis()` for the required fields.
+		See `	()` for the required fields.
 	
 	Example
 	-------
@@ -182,19 +182,25 @@ def analyze_game(A: np.ndarray, B: np.ndarray) -> dict:
 	row1_dom = (A[1, 0] >= A[0, 0]) and (A[1, 1] >= A[0, 1])
 	if row0_dom and not row1_dom:
 		analysis["row_weakly_dominant"] = 0
+		analysis["row_strictly_dominant"] = 0 if (A[0, 0] > A[1, 0]) and (A[0, 1] > A[1, 1]) else None
 	elif row1_dom and not row0_dom:
 		analysis["row_weakly_dominant"] = 1
+		analysis["row_strictly_dominant"] = 1 if (A[1, 0] > A[0, 0]) and (A[1, 1] > A[0, 1]) else None
 	else:
 		analysis["row_weakly_dominant"] = None  # none or both
+		analysis["row_strictly_dominant"] = None  # if both weakly dominant, then no strictly dominant
 
 	col0_dom = (B[0, 0] >= B[0, 1]) and (B[1, 0] >= B[1, 1])
 	col1_dom = (B[0, 1] >= B[0, 0]) and (B[1, 1] >= B[1, 0])
 	if col0_dom and not col1_dom:
 		analysis["col_weakly_dominant"] = 0
+		analysis["col_strictly_dominant"] = 0 if (B[0, 0] > B[0, 1]) and (B[1, 0] > B[1, 1]) else None
 	elif col1_dom and not col0_dom:
 		analysis["col_weakly_dominant"] = 1
+		analysis["col_strictly_dominant"] = 1 if (B[0, 1] > B[0, 0]) and (B[1, 1] > B[1, 0]) else None
 	else:
 		analysis["col_weakly_dominant"] = None
+		analysis["col_strictly_dominant"] = None
 
 	# ============================================================
 	# NASH EQUILIBRIUM ANALYSIS
@@ -311,7 +317,17 @@ def analyze_game(A: np.ndarray, B: np.ndarray) -> dict:
 	col_anti = (B[1, 0] >= B[0, 0]) and (B[0, 1] >= B[1, 1])
 	analysis["is_anti_coordination"] = bool(row_anti and col_anti)
 
-	
+	analysis["zero_sum"] = np.allclose(A + B, 0)
+	if len(analysis["pure_nash"])==2 and analysis["is_coordination"]:
+		nash1, nash2 = analysis["pure_nash"]
+		Apref1 = A[nash1] >= A[nash2]
+		Bpref1 = B[nash1] >= B[nash2]
+		if Apref1 and Bpref1 or (not Apref1 and not Bpref1):
+			analysis["harmony"] = True
+		else:
+			analysis["harmony"] = False
+	else:
+		analysis["harmony"] = None
 	return analysis
 
 
@@ -406,15 +422,54 @@ class MyAgent(Agent):
 	# ===== HELPER METHODS (examples) =====
 	# Add your own helper methods below
 	
-	def _classify_game(self) -> str:
+	def _classify_game(self, verbose=False) -> str:
 		"""
 		Example helper: Classify the game type based on payoff structure.
 		
 		Returns a string like 'prisoners_dilemma', 'chicken', 'coordination', etc.
 		"""
 		# TODO: Implement game classification
+		if verbose: print(self.analysis)
 		# Consider: dominant strategies, Nash equilibria, Pareto efficiency
-		return "unknown"
+		if len(self.analysis["pure_nash"])>=1: 
+			#could be, prisonerd dillema, deadlock
+			if len(self.analysis["pure_nash"]) == 1:
+				if (
+					self.analysis["row_strictly_dominant"] is not None 
+					and self.analysis["col_strictly_dominant"] is not None
+					and not self.analysis["nash_pareto_optimal"]
+				):
+					return "prisoners_dilemma"
+				elif (
+					self.analysis["row_strictly_dominant"] is not None 
+					and self.analysis["col_strictly_dominant"] is not None
+					and self.analysis["nash_pareto_optimal"]
+				):
+					return "deadlock" #
+				# 1 NE, also dominant strategy for both, 
+				# also pareto optimal, so very easy
+				else:
+					return "unknown_1NE"
+
+				
+			elif len(self.analysis["pure_nash"]) == 2:
+				# possibilies are: coordination, anti-coordination (chicken), harmony
+				if self.analysis["is_coordination"] and self.analysis["harmony"]:
+					return "harmony"
+				elif self.analysis["is_coordination"]:
+					return "coordination"
+				elif self.analysis["is_anti_coordination"]:
+					return "anti_coordination"
+				else:
+					return "unknown_2NE"
+			
+		elif self.analysis["mixed_nash"] is not None:
+			if self.analysis["zero_sum"]:
+				return f"zero_sum_mixed"
+			else:
+				return f"mixed"
+		else:
+			return "unknown"
 		
 	# ============================================================
 	# REQUIRED: get_analysis() method for grading
