@@ -364,11 +364,10 @@ class MyAgent(Agent):
 		# this agent to classify the game and determine your strategy.
 		# ==========================================
 		
-		A = self.payoff_matrix[:, :, 0]  # row payoffs
-		B = self.payoff_matrix[:, :, 1]  # column payoffs
-		self.analysis = analyze_game(A, B)
+		self.A = self.payoff_matrix[:, :, 0]  # row payoffs
+		self.B = self.payoff_matrix[:, :, 1]  # column payoffs
+		self.analysis = analyze_game(self.A, self.B)
 	
-		# Determine game class
 		self.game_class = self._classify_game(verbose=False)
 
 
@@ -377,6 +376,7 @@ class MyAgent(Agent):
 		self.coordination_target_action = None
 		self.steer_rounds = 6          # how long we push our preferred equilibrium
 		self.concede_after = 4         # how many times opponent must signal other diagonal
+		self.concede_after_streak = 4
 		self.opp_diagonal_counts = {0: 0, 1: 0}
 
 		# If this is a coordination game, compute preferred equilibrium
@@ -393,11 +393,18 @@ class MyAgent(Agent):
 		self.harmony_target = None
 		self.harmony_target_action = None
 		self.harmony_opp_counts = {0: 0, 1: 0}
+		self.harmony_opp_streak = 0
 		if self.game_class == "harmony" and len(self.analysis["pure_nash"]) == 2:
 			self.harmony_target = self._preferred_harmony_ne()
 			self.harmony_target_action = self.harmony_target[0] if self.player_id == 0 else self.harmony_target[1]
 
+		###GENERAL GAME (Boris)###
+		self.general_laplace = 1.0
+		self.general_epsilon = 0.08 #exploration rate for other strat
+		self.general_min_rounds = 10 #only start exploring after initial observations
+
 	
+
 	def get_action(self) -> int:
 		"""
 		Return your action for this round: 0 or 1.
@@ -410,6 +417,24 @@ class MyAgent(Agent):
 		int
 			Your action (0 or 1)
 		"""
+
+		# ===== YOUR STRATEGY CODE HERE =====
+		# 
+		# Simple example: always play action 0
+		# return 0
+		#
+		# Random example:
+		# return np.random.choice([0, 1])
+		#
+		# Tit-for-Tat example:
+		# if not self.history:
+		#	  return 0
+		# return self.history[-1][1]  # opponent's last action
+		#
+		# ===================================
+		
+		# Default: random action (replace this!)
+
 		#####COORDINATION GAME (Janneke)#####
 		if self.game_class == "coordination" and len(self.analysis["pure_nash"]) >= 2:
 			t = len(self.history)
@@ -465,7 +490,11 @@ class MyAgent(Agent):
 
 			# concede if opponent strongly signals the other diagonal action
 			other = 1 - int(self.harmony_target_action)
-			if self.harmony_opp_counts[other] >= self.concede_after:
+			if last_opp == other:
+				self.harmony_opp_streak +=1
+			else:
+				self.harmony_opp_streak = 0
+			if self.harmony_opp_streak >= self.concede_after_streak:
 				return other
 
 			return int(self.harmony_target_action)		
@@ -475,27 +504,11 @@ class MyAgent(Agent):
 		if self.game_class == "deadlock":
 			return self._deadlock_action_strategy()
 
-		# Not your domain yet: safe fallback
-		return self._play_mixed_or_random()
+		return self._general_adaptive_best_response()
+		# return self._play_mixed_or_random()
 	
-		# ===== YOUR STRATEGY CODE HERE =====
-		# 
-		# Simple example: always play action 0
-		# return 0
-		#
-		# Random example:
-		# return np.random.choice([0, 1])
-		#
-		# Tit-for-Tat example:
-		# if not self.history:
-		#	  return 0
-		# return self.history[-1][1]  # opponent's last action
-		#
-		# ===================================
-		
-		# Default: random action (replace this!)
-		return np.random.choice([0, 1])
-	
+
+
 	def observe_result(self, my_action: int, opp_action: int,
 					   my_payoff: float, opp_payoff: float) -> None:
 		"""
@@ -520,6 +533,9 @@ class MyAgent(Agent):
 			   
 		pass
 	
+
+
+
 	# ===== HELPER METHODS (examples) =====
 	# Add your own helper methods below
 	
@@ -534,6 +550,7 @@ class MyAgent(Agent):
 				best_val = val
 				best = (i, j)
 		return best
+
 
 	def _play_mixed_or_random(self):
 		"""Fallback: play mixed NE if available, else uniform random."""
@@ -608,9 +625,9 @@ class MyAgent(Agent):
         Fallback: play the action in the unique pure Nash equilibrium. (because of edge cases with tie Pareto optimal outcome)
         """
 
-		if self.player_id == 0:  # row player
+		if self.player_id == 0: 
 			dom = self.analysis.get("row_strictly_dominant")
-		else:  # column player
+		else:  
 			dom = self.analysis.get("col_strictly_dominant")
        
 		if dom is not None:
@@ -620,21 +637,54 @@ class MyAgent(Agent):
 		(i, j) = self.analysis["pure_nash"][0]
 		return int(i if self.player_id == 0 else j)
 	
+
 	def _preferred_harmony_ne(self):
 		"""
 		Pick the harmony equilibrium with highest social welfare (A+B).
 		"""
-		W = self.analysis["social_welfare"]  # computed in analyze_game
+		W = self.analysis["social_welfare"] 
 		best = None
 		best_val = -float("inf")
 		for (i, j) in self.analysis["pure_nash"]:
 			val = W[i, j]
-			if val > best_val:
+			if (val > best_val) or (val == best_val and (best is None or (i,j) < best)): #adds tie break to (0,0) over (1,1)
 				best_val = val
 				best = (i, j)
 		return best
-		
+	
 
+	def _general_action_strategy(self) -> int:
+		"""
+		We play best response to opponent perceived action frequencies with some epsilon exploration to check if non-stationary
+		"""
+		t = len(self.history)
+		opp0 = sum(1 for (_,opp_a,_,_) in self.history if opp_a == 0)
+		opp1 = t - opp0
+
+		#Laplace smoothing
+		a = float(self.general_laplace)
+		q = (opp0 + a) / (t + 2.0 * a) if t > 0 else 0.5  # P(opp plays 0)
+
+		if self.player_id == 0:
+			exp0 = q * self.A[0, 0] + (1 - q) * self.A[0, 1]
+			exp1 = q * self.A[1, 0] + (1 - q) * self.A[1, 1]
+		else:
+			exp0 = q * self.B[0, 0] + (1 - q) * self.B[1, 0]  
+			exp1 = q * self.B[0, 1] + (1 - q) * self.B[1, 1]  
+
+		if exp0 > exp1:
+			best = 0
+		elif exp1 > exp0:
+			best = 1
+		else:
+			best = np.random.choice([0, 1])
+
+    	# Epsilon exploration: slightly higher early on helps detect non-stationary / reactive opponents
+		eps = self.general_epsilon if t >= self.general_min_rounds else max(self.general_epsilon, 0.25)
+
+		if np.random.rand() < eps:
+			return 1 - best
+		return best
 
 
 
