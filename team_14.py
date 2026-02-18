@@ -369,7 +369,7 @@ class MyAgent(Agent):
 		# Determine game class
 		self.game_class = self._classify_game(verbose=False)
 
-		# Coordination-game state
+		######COORDINATION GAME (Janneke)#####
 		self.coordination_target = None
 		self.coordination_target_action = None
 		self.steer_rounds = 6          # how long we push our preferred equilibrium
@@ -399,7 +399,43 @@ class MyAgent(Agent):
 		int
 			Your action (0 or 1)
 		"""
-		
+		#####COORDINATION GAME (Janneke)#####
+		if self.game_class == "coordination" and len(self.analysis["pure_nash"]) >= 2:
+			t = len(self.history)
+
+			# If last round achieved our target equilibrium, lock in.
+			if t > 0:
+				last_my, last_opp, _, _ = self.history[-1]
+
+				# Convert to (row_action, col_action)
+				if self.player_id == 0:
+					last_outcome = (last_my, last_opp)
+				else:
+					last_outcome = (last_opp, last_my)
+
+				if last_outcome == self.coordination_target:
+					return self.coordination_target_action
+
+				# Track opponent tendency for 0/1
+				self.opp_diagonal_counts[last_opp] += 1
+
+			# Phase 1: push our preferred equilibrium for a few rounds
+			if t < self.steer_rounds:
+				return self.coordination_target_action
+
+			# Phase 2: if opponent consistently signals the other diagonal, concede
+			my_target = self.coordination_target_action
+			other = 1 - my_target
+
+			if self.opp_diagonal_counts[other] >= self.concede_after:
+				return other
+
+			# Otherwise: keep signaling consistently (no oscillation)
+			return my_target
+
+		# Not your domain yet: safe fallback
+		return self._play_mixed_or_random()
+	
 		# ===== YOUR STRATEGY CODE HERE =====
 		# 
 		# Simple example: always play action 0
@@ -445,6 +481,7 @@ class MyAgent(Agent):
 	# ===== HELPER METHODS (examples) =====
 	# Add your own helper methods below
 	
+	#COORDINATION GAME (Janneke)
 	def _preferred_coordination_ne(self):
 		"""Return (i,j) of the pure Nash equilibrium that maximizes MY payoff."""
 		best = None
