@@ -368,9 +368,9 @@ class MyAgent(Agent):
 		B = self.payoff_matrix[:, :, 1]  # column payoffs
 		self.analysis = analyze_game(A, B)
 	
-  
 		# Determine game class
 		self.game_class = self._classify_game(verbose=False)
+
 
 		######COORDINATION GAME (Janneke)#####
 		self.coordination_target = None
@@ -388,6 +388,14 @@ class MyAgent(Agent):
 				self.coordination_target_action = self.coordination_target[0]
 			else:  # column player
 				self.coordination_target_action = self.coordination_target[1]
+
+		######HARMONY GAME (Boris)#####
+		self.harmony_target = None
+		self.harmony_target_action = None
+		self.harmony_opp_counts = {0: 0, 1: 0}
+		if self.game_class == "harmony" and len(self.analysis["pure_nash"]) == 2:
+			self.harmony_target = self._preferred_harmony_ne()
+			self.harmony_target_action = self.harmony_target[0] if self.player_id == 0 else self.harmony_target[1]
 
 	
 	def get_action(self) -> int:
@@ -436,9 +444,36 @@ class MyAgent(Agent):
 			# Otherwise: keep signaling consistently (no oscillation)
 			return my_target
 		
+
+		###HARMONY GAME (Boris)###
+		if self.game_class == "harmony" and self.harmony_target is not None:
+			t = len(self.history)
+
+			if t > 0:
+				last_my, last_opp, _, _ = self.history[-1]
+        		# convert to (row_action, col_action)
+				last_outcome = (last_my, last_opp) if self.player_id == 0 else (last_opp, last_my)
+        		# if we reached the target equilibrium, lock in
+				if last_outcome == self.harmony_target:
+					return int(self.harmony_target_action)
+        		# track opponent's tendency (their last action)
+				self.harmony_opp_counts[last_opp] += 1
+
+			# push target for a while
+			if t < self.steer_rounds:
+				return int(self.harmony_target_action)
+
+			# concede if opponent strongly signals the other diagonal action
+			other = 1 - int(self.harmony_target_action)
+			if self.harmony_opp_counts[other] >= self.concede_after:
+				return other
+
+			return int(self.harmony_target_action)		
+		
+
 		###DEADLOCK GAME (Boris)#####
 		if self.game_class == "deadlock":
-			return self._deadlock_action_strategy
+			return self._deadlock_action_strategy()
 
 		# Not your domain yet: safe fallback
 		return self._play_mixed_or_random()
@@ -584,6 +619,20 @@ class MyAgent(Agent):
         # Fallback (should never be triggered under strict deadlock but protects against edge cases)
 		(i, j) = self.analysis["pure_nash"][0]
 		return int(i if self.player_id == 0 else j)
+	
+	def _preferred_harmony_ne(self):
+		"""
+		Pick the harmony equilibrium with highest social welfare (A+B).
+		"""
+		W = self.analysis["social_welfare"]  # computed in analyze_game
+		best = None
+		best_val = -float("inf")
+		for (i, j) in self.analysis["pure_nash"]:
+			val = W[i, j]
+			if val > best_val:
+				best_val = val
+				best = (i, j)
+		return best
 		
 
 
