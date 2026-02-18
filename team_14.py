@@ -438,7 +438,7 @@ class MyAgent(Agent):
 		
 		###DEADLOCK GAME (Boris)#####
 		if self.game_class == "deadlock":
-			return self
+			return self._deadlock_action_strategy
 
 		# Not your domain yet: safe fallback
 		return self._play_mixed_or_random()
@@ -566,7 +566,7 @@ class MyAgent(Agent):
 			return "unknown"
 		
 
-
+	
 	def _deadlock_action_strategy(self) -> int:
 		"""
         Deadlock: play the (strictly) dominant action if present,
@@ -585,6 +585,11 @@ class MyAgent(Agent):
 		(i, j) = self.analysis["pure_nash"][0]
 		return int(i if self.player_id == 0 else j)
 		
+
+
+
+
+
 	# ============================================================
 	# REQUIRED: get_analysis() method for grading
 	# ============================================================
@@ -594,6 +599,10 @@ class MyAgent(Agent):
 	def get_analysis(self) -> dict:
 		"""Returns the game analysis dictionary for grading."""
 		return self.analysis
+
+
+
+
 
 class MixedNEAgent(Agent):
 	"""
