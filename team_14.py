@@ -34,6 +34,8 @@ def create_empty_analysis() -> dict:
 		
 		'row_weakly_dominant': None,  # Row player's weakly dominant action
 		'col_weakly_dominant': None,  # Column player's weakly dominant action
+		'row_strictly_dominant': None,  # Row player's strictly dominant action
+		'col_strictly_dominant': None, # Column player's strictly dominant action
 		
 		# ============================================================
 		# NASH EQUILIBRIUM ANALYSIS
@@ -108,7 +110,9 @@ def create_empty_analysis() -> dict:
 		# plays 'Deny' they rather want the opponent to 'Deny' as well.
 		# Value: bool
 		
-		'is_anti_coordination': False
+		'is_anti_coordination': False,
+		'zero_sum': None,
+		'harmony': None
 	}
 
 
@@ -362,7 +366,26 @@ class MyAgent(Agent):
 		
 		self.analysis = analyze_game(self.my_payoffs, self.opp_payoffs)
   
-		pass
+		# Determine game class
+		self.game_class = self._classify_game(verbose=False)
+
+		# Coordination-game state
+		self.coordination_target = None
+		self.coordination_target_action = None
+		self.steer_rounds = 6          # how long we push our preferred equilibrium
+		self.concede_after = 4         # how many times opponent must signal other diagonal
+		self.opp_diagonal_counts = {0: 0, 1: 0}
+
+		# If this is a coordination game, compute preferred equilibrium
+		if self.game_class == "coordination" and len(self.analysis["pure_nash"]) >= 2:
+			self.coordination_target = self._preferred_coordination_ne()
+
+			# Determine my action corresponding to that equilibrium
+			if self.player_id == 0:  # row player
+				self.coordination_target_action = self.coordination_target[0]
+			else:  # column player
+				self.coordination_target_action = self.coordination_target[1]
+
 	
 	def get_action(self) -> int:
 		"""
@@ -422,6 +445,30 @@ class MyAgent(Agent):
 	# ===== HELPER METHODS (examples) =====
 	# Add your own helper methods below
 	
+	def _preferred_coordination_ne(self):
+		"""Return (i,j) of the pure Nash equilibrium that maximizes MY payoff."""
+		best = None
+		best_val = -float("inf")
+		for (i, j) in self.analysis["pure_nash"]:
+			val = self.my_payoffs[i, j]  # my payoff at that outcome
+			if val > best_val:
+				best_val = val
+				best = (i, j)
+		return best
+
+	def _play_mixed_or_random(self):
+		"""Fallback: play mixed NE if available, else uniform random."""
+		mixed = self.analysis.get("mixed_nash", None)
+		if mixed is not None:
+			p, q = mixed
+			if self.player_id == 0:  # row player: use p
+				return 0 if np.random.rand() < p else 1
+			else:  # column player: use q
+				return 0 if np.random.rand() < q else 1
+		return int(np.random.rand() < 0.5)
+
+
+
 	def _classify_game(self, verbose=False) -> str:
 		"""
 		Example helper: Classify the game type based on payoff structure.
@@ -543,18 +590,18 @@ if __name__ == "__main__":
 	print(f"\nMyAgent scored: {results['scores'][0]:.2f}")
 	print(f"TitForTat scored: {results['scores'][1]:.2f}")
 
-if __name__ == "__main__":
-    from competition import load_game
+#if __name__ == "__main__":
+ #   from competition import load_game
+#
+ #   for fname in ["battle_of_sexes.txt", "chicken.txt", "grade.txt"]:
+  #      payoff = load_game(f"games/{fname}")     # shape (2,2,2)
+   #     A = payoff[:, :, 0]                      # row payoffs (2,2)
+    #    B = payoff[:, :, 1]                      # col payoffs (2,2)
 
-    for fname in ["battle_of_sexes.txt", "chicken.txt", "grade.txt"]:
-        payoff = load_game(f"games/{fname}")     # shape (2,2,2)
-        A = payoff[:, :, 0]                      # row payoffs (2,2)
-        B = payoff[:, :, 1]                      # col payoffs (2,2)
-
-        print("\nGame:", fname)
-        print("A=\n", A)
-        print("B=\n", B)
-        print(analyze_game(A, B))
+     #   print("\nGame:", fname)
+      #  print("A=\n", A)
+       # print("B=\n", B)
+        #print(analyze_game(A, B))
 
 
 
