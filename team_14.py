@@ -364,7 +364,10 @@ class MyAgent(Agent):
 		# this agent to classify the game and determine your strategy.
 		# ==========================================
 		
-		self.analysis = analyze_game(self.my_payoffs, self.opp_payoffs)
+		A = self.payoff_matrix[:, :, 0]  # row payoffs
+		B = self.payoff_matrix[:, :, 1]  # column payoffs
+		self.analysis = analyze_game(A, B)
+	
   
 		# Determine game class
 		self.game_class = self._classify_game(verbose=False)
@@ -432,6 +435,10 @@ class MyAgent(Agent):
 
 			# Otherwise: keep signaling consistently (no oscillation)
 			return my_target
+		
+		###DEADLOCK GAME (Boris)#####
+		if self.game_class == "deadlock":
+			return self
 
 		# Not your domain yet: safe fallback
 		return self._play_mixed_or_random()
@@ -557,6 +564,26 @@ class MyAgent(Agent):
 				return f"mixed"
 		else:
 			return "unknown"
+		
+
+
+	def _deadlock_action_strategy(self) -> int:
+		"""
+        Deadlock: play the (strictly) dominant action if present,
+        Fallback: play the action in the unique pure Nash equilibrium. (because of edge cases with tie Pareto optimal outcome)
+        """
+
+		if self.player_id == 0:  # row player
+			dom = self.analysis.get("row_strictly_dominant")
+		else:  # column player
+			dom = self.analysis.get("col_strictly_dominant")
+       
+		if dom is not None:
+			return int(dom)
+       
+        # Fallback (should never be triggered under strict deadlock but protects against edge cases)
+		(i, j) = self.analysis["pure_nash"][0]
+		return int(i if self.player_id == 0 else j)
 		
 	# ============================================================
 	# REQUIRED: get_analysis() method for grading
