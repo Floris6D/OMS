@@ -520,6 +520,9 @@ class MixedNEAgent(Agent):
 		# Default: random action (replace this!)
 		return np.random.choice([0, 1])
 
+
+
+
 # ===== TEST YOUR AGENT =====
 if __name__ == "__main__":
 	from competition import Competition, load_game, load_agent_class
