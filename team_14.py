@@ -405,11 +405,18 @@ class MyAgent(Agent):
 
 		###ZERO SUM AND MIXED NE (Floris):
 		self.SHORT_WINDOW = 5
-		self.ALPHA_SHORT = 0.3
+		self.ALPHA_SHORT = 0.35
 		self.WINDOW = 20
-		self.ALPHA = 0.6
+		self.ALPHA = 0.7
 		self.DETERMINISCTIC_DETECTION_START = 10
-		self.DETERMINISCTIC_DETECTION_THRESHOLD = 0.85
+		self.DETERMINITIC_DETECTION_ALPHA = 0.001
+
+		self._did_deterministic = 0
+		self._triggered_short = 0
+		self._triggered_long = 0
+		self._played_mixed = 0
+		self._times_called = 0
+		self._trigggered_wsly = 0
 
 		
 	
@@ -445,18 +452,18 @@ class MyAgent(Agent):
 		# Default: random action (replace this!)
 
 		#####COORDINATION GAME (Janneke)#####
-		t = len(self.history)
-		if t >= 8:
-			opp_actions = [h[1] for h in self.history]  # opponent actions
-			p0 = opp_actions.count(0) / t
-			if p0 >= 0.9 or p0 <= 0.1:
-				opp_fixed = 0 if p0 >= 0.5 else 1
+		# t = len(self.history)
+		# if t >= 8:
+		# 	opp_actions = [h[1] for h in self.history]  # opponent actions
+		# 	p0 = opp_actions.count(0) / t
+		# 	if p0 >= 0.9 or p0 <= 0.1:
+		# 		opp_fixed = 0 if p0 >= 0.5 else 1
 
-				# Best response to opponent fixed action (true row/col)
-				if self.player_id == 0:   # I am row
-					return int(np.argmax(self.A[:, opp_fixed]))
-				else:                     # I am column
-					return int(np.argmax(self.B[opp_fixed, :]))
+		# 		# Best response to opponent fixed action (true row/col)
+		# 		if self.player_id == 0:   # I am row
+		# 			return int(np.argmax(self.A[:, opp_fixed]))
+		# 		else:                     # I am column
+		# 			return int(np.argmax(self.B[opp_fixed, :]))
 
 
 		if self.game_class == "coordination" and len(self.analysis["pure_nash"]) >= 2:
@@ -705,19 +712,35 @@ class MyAgent(Agent):
 		return 0.5 * (1 + np.erf(x / np.sqrt(2)))
 
 
-	def fisher_exact_numpy(k1, n1, k2, n2):
-		# Build contingency table totals
+	def fisher_exact_numpy(self, k1, n1, k2, n2):
+
+		# Basic sanity checks
+		if (
+			n1 <= 0 or n2 <= 0
+			or k1 < 0 or k2 < 0
+			or k1 > n1 or k2 > n2
+		):
+			return 1.0
+
 		total_success = k1 + k2
 		total = n1 + n2
 
-		# Range of possible values for group 1 successes
+		# Degenerate cases → nothing to test
+		if total_success == 0 or total_success == total:
+			return 1.0
+
 		min_k = max(0, total_success - n2)
 		max_k = min(n1, total_success)
 
+		if min_k == max_k:
+			return 1.0  # only one possible table
+
 		ks = np.arange(min_k, max_k + 1)
 
-		# Hypergeometric probabilities
+		# Stable log binomial coefficient
 		def log_comb(n, k):
+			if k == 0 or k == n:
+				return 0.0
 			return (
 				np.sum(np.log(np.arange(n - k + 1, n + 1)))
 				- np.sum(np.log(np.arange(1, k + 1)))
@@ -730,24 +753,29 @@ class MyAgent(Agent):
 			for k in ks
 		])
 
-		probs = np.exp(log_probs)
+		# Normalize in log-space for numerical stability
+		max_log = np.max(log_probs)
+		probs = np.exp(log_probs - max_log)
+		probs /= probs.sum()
 
 		# Observed probability
-		obs_index = np.where(ks == k1)[0][0]
-		p_obs = probs[obs_index]
+		obs_index = np.where(ks == k1)[0]
+		if len(obs_index) == 0:
+			return 1.0
 
-		# Two-sided p-value (same definition as scipy)
+		p_obs = probs[obs_index[0]]
+
 		p_value = probs[probs <= p_obs].sum()
 
-		return p_value
+		return float(min(1.0, p_value))
 
 	
 	def _check_opp_for_history1_responses(self, alpha):
 		# check if opp directly answers to our previous action
 		# with a high prob
 		if len(self.history) >= self.DETERMINISCTIC_DETECTION_START:
-			reaction_to_0 = 0
-			reaction_to_1 = 0
+			reaction_to_0 = 1
+			reaction_to_1 = 1 #laplace
 			my_previous_action = self.history[0][self.player_id]
 			for element in self.history[1:]:
 				if element[1-self.player_id] == 0:
@@ -756,38 +784,167 @@ class MyAgent(Agent):
 					elif my_previous_action == 1:
 						reaction_to_1 += 1
 
-			total_0 = sum(1 for (row_a, _, _, _) in self.history[:-1] if row_a == 0)
-			total_1 = sum(1 for (row_a, _, _, _) in self.history[:-1] if row_a == 1)
+			total_0 = sum(1 for (row_a, _, _, _) in self.history[:-1] if row_a == 0) +1
+			total_1 = sum(1 for (row_a, _, _, _) in self.history[:-1] if row_a == 1) + 1 #laplace
 			p_0 = reaction_to_0 / total_0 if total_0 > 0 else 0
 			p_1 = reaction_to_1 / total_1 if total_1 > 0 else 0
+			p_value_difference = self.fisher_exact_numpy(reaction_to_0, total_0, reaction_to_1, total_1)
 		
-		p_value_difference = self.fisher_exact_numpy(reaction_to_0, total_0, reaction_to_1, total_1)
+			if p_value_difference < alpha:
+				#we've concluded that they are different, now for both of my possible actions, lets calculate the expected payoff of their response and pick the best one
+				if self.player_id == 0: #row player, so we look at A
+					Eprev0play0 = p_0 * self.A[0, 0] + (1 - p_0) * self.A[0, 1]
+					Eprev0play1 = p_0 * self.A[1, 0] + (1 - p_0) * self.A[1, 1]
+					Eprev1play0 = p_1 * self.A[0, 0] + (1 - p_1) * self.A[0, 1]
+					Eprev1play1 = p_1 * self.A[1, 0] + (1 - p_1) * self.A[1, 1]
+				else: #column player, so we look at B
+					Eprev0play0 = p_0 * self.B[0, 0] + (1 - p_0) * self.B[1, 0]
+					Eprev0play1 = p_0 * self.B[0, 1] + (1 - p_0) * self.B[1, 1]
+					Eprev1play0 = p_1 * self.B[0, 0] + (1 - p_1) * self.B[1, 0]
+					Eprev1play1 = p_1 * self.B[0, 1] + (1 - p_1) * self.B[1, 1]
+					# switching_average = (Eprev0play1 + Eprev1play0) / 2
+					# if switching_average > max(Eprev0play0, Eprev1play1):
+					# 	return True, 1 - my_prev_action
+					# elif Eprev1play1 < Eprev0play0:
+					# 	return True, 0
+					# elif Eprev0play0 < Eprev1play1:
+					# 	return True, 1
+					
+				def immediate_reward(state, action):
+					# state = my previous action (0 or 1)
+					# action = what I play now (0 or 1)
+					if state == 0 and action == 0:
+						return Eprev0play0
+					elif state == 0 and action == 1:
+						return Eprev0play1
+					elif state == 1 and action == 0:
+						return Eprev1play0
+					elif state == 1 and action == 1:
+						return Eprev1play1
+					else:
+						print("<<< _check_opp_for_history1_responses immediate_reward invalid state/action >>>")
+						return 0
+					
+
+				gamma = 0.95  
+
+				V = [0.0, 0.0]
+
+				for _ in range(50):  # converges extremely fast
+					new_V = [0.0, 0.0]
+					for s in [0, 1]:
+						q0 = immediate_reward(s, 0) + gamma * V[0]
+						q1 = immediate_reward(s, 1) + gamma * V[1]
+						new_V[s] = max(q0, q1)
+					V = new_V
+
+				# --- 3. Choose optimal action given current state ---
+				current_state = self.history[-1][self.player_id]
+
+				q0 = immediate_reward(current_state, 0) + gamma * V[0]
+				q1 = immediate_reward(current_state, 1) + gamma * V[1]
+				action = 0 if q0 > q1 else 1
+				return True, action
+		return False, None
+						
+
+
+	def detect_wsls(self, window=10, threshold=0.85):
+		if len(self.history) < window + 1:
+			return False, None  # not enough data
 		
-		if p_value_difference >= alpha:
-			return False, None
+		recent = self.history[-(window+1):]
+		
+		# determine opponent payoff matrix
+		if self.player_id == 0:
+			opp_matrix = self.B
+			opp_action_index = 1
+			opp_payoff_index = 3
 		else:
-			p = p_0 if self.history[-1][self.player_id] == 0 else p_1
-			if self.player_id==0:
-				exp0 = p * self.my_payoffs[0, 0] + (1 - p) * self.my_payoffs[0, 1]
-				exp1 = p * self.my_payoffs[1, 0] + (1 - p) * self.my_payoffs[1, 1]
-				action = 0 if exp0 > exp1 else 1
-			elif self.player_id==1:
-				exp0 = p * self.my_payoffs[0, 0] + (1 - p) * self.my_payoffs[1, 0]  
-				exp1 = p * self.my_payoffs[0, 1] + (1 - p) * self.my_payoffs[1, 1]  
-				action = 0 if exp0 > exp1 else 1
-		return True, action
+			opp_matrix = self.A
+			opp_action_index = 0
+			opp_payoff_index = 2
+
+		# compute opponent's top 2 payoff values
+		flat_payoffs = opp_matrix.flatten()
+		top2 = sorted(flat_payoffs)[-2:]
+
+		correct = 0
+		total = 0
+
+		for t in range(1, len(recent)):
+			prev = recent[t-1]
+			curr = recent[t]
+
+			last_action = prev[opp_action_index]
+			last_payoff = prev[opp_payoff_index]
+
+			if last_payoff in top2:
+				predicted = last_action
+			else:
+				predicted = 1 - last_action
+
+			actual = curr[opp_action_index]
+
+			if predicted == actual:
+				correct += 1
+
+			total += 1
+		accuracy = correct / total
+
+		if accuracy >= threshold:
+			last = self.history[-1]
+
+			if self.player_id == 0:
+				opp_matrix = self.B
+				opp_action = last[1]
+				opp_payoff = last[3]
+			else:
+				opp_matrix = self.A
+				opp_action = last[0]
+				opp_payoff = last[2]
+
+			if opp_payoff in top2:
+				predicted_action =  opp_action
+			else:
+				predicted_action=  1 - opp_action
+
+
+			if self.player_id == 0:
+				# row player
+				exp0 = self.A[0, predicted_action]
+				exp1 = self.A[1, predicted_action]
+				action =  0 if exp0 > exp1 else 1
+			else:
+				# column player
+				exp0 = self.B[predicted_action, 0]
+				exp1 = self.B[predicted_action, 1]
+				action =  0 if exp0 > exp1 else 1
+			return True, action
+		else:
+			return False, None
 
 
 	def _zero_sum_OR_mixed_strategy(self) -> int:
 		"""
 		If the game is zero-sum with a mixed NE, play the the mixed NE strategy.
 		"""
+		self._times_called+=1
 		mixed = self.analysis.get("mixed_nash", None)
 		if isinstance(mixed, list) and len(mixed)[0] == 2:
 			mixed = mixed[0]  # if multiple mixed equilibria, just take the first one (should not happen in 2x2) but again dont wanna fail grading
 
-		opp_lagging_response, action = self._check_opp_for_history1_responses(alpha=self.ALPHA)
+
+
+		opp_playing_wsly, action = self.detect_wsls(window=self.WINDOW, threshold=0.9)
+		if opp_playing_wsly:
+			self._trigggered_wsly += 1
+			return action
+		#first we check if the opponent is playing according to our previous action
+		#if so, we exploit the hell out of it
+		opp_lagging_response, action = self._check_opp_for_history1_responses(alpha=self.DETERMINITIC_DETECTION_ALPHA)
 		if opp_lagging_response:
+			self._did_deterministic += 1
 			return action
 
 		if mixed is not None:
@@ -804,6 +961,10 @@ class MyAgent(Agent):
 					# print(f"Window {window}: theoretical {mixed[1]}, empirical {emp_0} , p-value={p_value:.4f}, alpha={alpha}")
 					# If opponent deviates significantly from the mixed NE, switch to best response
 					if p_value < alpha:
+						if window == self.SHORT_WINDOW:
+							self._triggered_short += 1
+						else:
+							self._triggered_long += 1
 						if self.player_id == 0:  # row player: best empirical response to q
 							exp0 = emp_0 * self.A[0, 0] + emp_1 * self.A[0, 1]
 							exp1 = emp_0 * self.A[1, 0] + emp_1 * self.A[1, 1]
@@ -813,9 +974,8 @@ class MyAgent(Agent):
 							exp1 = emp_0 * self.B[0, 1] + emp_1 * self.B[1, 1]  
 							return 0 if exp0 > exp1 else 1
 						
-
-
 			p, q = mixed
+			self._played_mixed += 1
 			if self.player_id == 0:  # row player: use p
 				return 0 if np.random.rand() < p else 1
 			else:  # column player: use q

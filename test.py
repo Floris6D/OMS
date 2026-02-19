@@ -231,14 +231,15 @@ def test_strategy(gametype, N, baseline = False, only_row =True):
     results = {}
     results_baseline = {}
     for name, opponent_cls in agents.items():
-        
         results_local =[]
         results_local_baseline = []
         for _ in range(N):
+            if N==1: print(f"Testing against {name}...")
             game = combine_AB(*generate_game(gametype))
             competition = Competition(game)
             if only_row: 
-                result = competition.run(MyAgent, opponent_cls)
+                result = competition.run(agent_class_0 = MyAgent, 
+                                         agent_class_1= opponent_cls)
                 results_local.append(result["scores"][0])  # Score of our agent (row player)
             else: 
                 raise NotImplementedError("Testing both row and column agents not implemented yet, set only_row=True to test row agents only")
@@ -248,6 +249,8 @@ def test_strategy(gametype, N, baseline = False, only_row =True):
                 results_local_baseline.append(result_baseline["scores"][0])  # Score of TitForTat (row player)
         results[name] = results_local
         results_baseline[name] = results_local_baseline
+            
+
     print(f"Results of MyAgent against various opponents in {gametype} game:")
     for opponent, scores in results.items():
         avg_score = np.mean(scores)
@@ -258,7 +261,7 @@ def test_strategy(gametype, N, baseline = False, only_row =True):
 
     
 if __name__ == "__main__":
-    test_strategy("zero_sum", N=100, baseline = "WinStayLoseShift")
+    test_strategy("zero_sum", N=100, baseline = "BestResponder")
 
     
 
