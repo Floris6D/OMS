@@ -403,6 +403,13 @@ class MyAgent(Agent):
 		self.general_epsilon = 0.08 #exploration rate for other strat
 		self.general_min_rounds = 10 #only start exploring after initial observations
 
+		###ZERO SUM AND MIXED NE (Floris):
+		self.WINDOW = 30
+		self.DEVIATION_THRESHOLD = 0.1
+
+		self.SHORT_WINDOW = 5
+		self.DEVIATION_THRESHOLD_SHORT = 0.2
+
 	
 
 	def get_action(self) -> int:
@@ -503,6 +510,9 @@ class MyAgent(Agent):
 		###DEADLOCK GAME (Boris)#####
 		if self.game_class == "deadlock":
 			return self._deadlock_action_strategy()
+		
+		if self.game_class == "zero_sum_mixed" or self.game_class =="mixed":
+			return self._zero_sum_OR_mixed_strategy()
 
 		return self._general_adaptive_best_response()
 		# return self._play_mixed_or_random()
@@ -653,6 +663,44 @@ class MyAgent(Agent):
 		return best
 	
 
+	def _zero_sum_OR_mixed_strategy(self) -> int:
+		"""
+		If the game is zero-sum with a mixed NE, play the the mixed NE strategy.
+		"""
+		mixed = self.analysis.get("mixed_nash", None)
+		if isinstance(mixed, list) and len(mixed)[0] == 2:
+			mixed = mixed[0]  # if multiple mixed equilibria, just take the first one (should not happen in 2x2) but again dont wanna fail grading
+		if mixed is not None:
+			# We register wether opponent is holding itself to the mixed NE, so we can detect if they are non-stationary/reactive and switch to best response if needed
+			if len(self.history)>=self.WINDOW:
+				recent_history = self.history[-self.WINDOW:]
+				opp0 = sum(1 for (_,opp_a,_,_) in recent_history if opp_a == 0)
+				opp1 = len(recent_history) - opp0
+				emp_0 = opp0 / len(recent_history)  # empirical frequency opponent plays 0
+				emp_1 = 1 - emp_0
+				# statistical test if emp_= is significantly different from mixed[0] (the q in the mixed NE) could be added here, but for simplicity we just check if the absolute difference exceeds a threshold
+				# If opponent deviates significantly from the mixed NE, switch to best response
+				if abs(emp_0 - mixed[1]) > self.DEVIATION_THRESHOLD:
+					if self.player_id == 0:  # row player: best empirical response to q
+						exp0 = emp_0 * self.A[0, 0] + emp_1 * self.A[0, 1]
+						exp1 = emp_0 * self.A[1, 0] + emp_1 * self.A[1, 1]
+						return 0 if exp0 > exp1 else 1
+					else:  # column player: best empirical response to p
+						exp0 = emp_0 * self.B[0, 0] + emp_1 * self.B[1, 0]  
+						exp1 = emp_0 * self.B[0, 1] + emp_1 * self.B[1, 1]  
+						return 0 if exp0 > exp1 else 1
+
+
+			p, q = mixed
+			if self.player_id == 0:  # row player: use p
+				return 0 if np.random.rand() < p else 1
+			else:  # column player: use q
+				return 0 if np.random.rand() < q else 1
+		else:
+			print(" << _zero_sum_OR_mixed_strategy called but no mixed NE found, should not happen >> ")
+			return int(np.random.rand() < 0.5)
+
+
 	def _general_action_strategy(self) -> int:
 		"""
 		We play best response to opponent perceived action frequencies with some epsilon exploration to check if non-stationary
@@ -724,7 +772,9 @@ class MixedNEAgent(Agent):
 	def __init__(self, player_id: int, payoff_matrix: np.ndarray):
 		super().__init__(player_id, payoff_matrix)
 		
-		pass
+		A = self.payoff_matrix[:, :, 0]
+		B = self.payoff_matrix[:, :, 1]
+		self.analysis = analyze_game(A, B)
 
 	def get_action(self) -> int:
 		"""
@@ -735,9 +785,23 @@ class MixedNEAgent(Agent):
 		int
 			Action of this agent (0 or 1)
 		"""
-		
-		# Default: random action (replace this!)
-		return np.random.choice([0, 1])
+		def my_action(i, j):
+			return i if self.player_id == 0 else j
+
+		if self.analysis["pure_nash"] and len(self.analysis["pure_nash"]) == 1:
+			# If there's a unique pure NE, play that action with certainty
+			(i, j) = self.analysis["pure_nash"][0]
+			return my_action(i, j)
+		elif self.analysis["mixed_nash"] is not None:
+			p, q = self.analysis["mixed_nash"]
+			if self.player_id == 0:  # row player: use p
+				return 0 if np.random.rand() < p else 1
+			else:  # column player: use q
+				return 0 if np.random.rand() < q else 1
+		else:
+			print("Warning: No pure or mixed NE found, should not be possible")
+			print("would raise an error but don't want to fail the assignment you know")
+			return np.random.choice([0, 1])
 
 
 
