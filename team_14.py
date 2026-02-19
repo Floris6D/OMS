@@ -404,10 +404,12 @@ class MyAgent(Agent):
 		self.general_min_rounds = 10 #only start exploring after initial observations
 
 		###ZERO SUM AND MIXED NE (Floris):
-		self.SHORT_WINDOW = 10
-		self.DEVIATION_THRESHOLD_SHORT = 0.2
+		self.SHORT_WINDOW = 5
+		self.ALPHA_SHORT = 0.3
 		self.WINDOW = 20
-		self.DEVIATION_THRESHOLD = 0.1
+		self.ALPHA = 0.6
+		self.DETERMINISCTIC_DETECTION_START = 10
+		self.DETERMINISCTIC_DETECTION_THRESHOLD = 0.85
 
 		
 	
@@ -663,6 +665,102 @@ class MyAgent(Agent):
 		return best
 	
 
+
+	def _binom_test_numpy(self, k, n, p):
+		# Compute binomial PMF using recursive relation
+		probs = np.zeros(n + 1)
+
+		# Start with P(X=0)
+		probs[0] = (1 - p) ** n
+
+		# Use recursive formula:
+		# P(X=i) = P(X=i-1) * (n-i+1)/i * p/(1-p)
+		for i in range(1, n + 1):
+			probs[i] = probs[i - 1] * (n - i + 1) / i * (p / (1 - p))
+
+		p_obs = probs[k]
+
+		# Two-sided test (same definition as scipy)
+		return probs[probs <= p_obs].sum()
+	
+
+	def _normal_cdf(self, x):
+		return 0.5 * (1 + np.erf(x / np.sqrt(2)))
+
+
+	def fisher_exact_numpy(k1, n1, k2, n2):
+		# Build contingency table totals
+		total_success = k1 + k2
+		total = n1 + n2
+
+		# Range of possible values for group 1 successes
+		min_k = max(0, total_success - n2)
+		max_k = min(n1, total_success)
+
+		ks = np.arange(min_k, max_k + 1)
+
+		# Hypergeometric probabilities
+		def log_comb(n, k):
+			return (
+				np.sum(np.log(np.arange(n - k + 1, n + 1)))
+				- np.sum(np.log(np.arange(1, k + 1)))
+			)
+
+		log_probs = np.array([
+			log_comb(n1, k)
+			+ log_comb(n2, total_success - k)
+			- log_comb(total, total_success)
+			for k in ks
+		])
+
+		probs = np.exp(log_probs)
+
+		# Observed probability
+		obs_index = np.where(ks == k1)[0][0]
+		p_obs = probs[obs_index]
+
+		# Two-sided p-value (same definition as scipy)
+		p_value = probs[probs <= p_obs].sum()
+
+		return p_value
+
+	
+	def _check_opp_for_history1_responses(self, alpha):
+		# check if opp directly answers to our previous action
+		# with a high prob
+		if len(self.history) >= self.DETERMINISCTIC_DETECTION_START:
+			reaction_to_0 = 0
+			reaction_to_1 = 0
+			my_previous_action = self.history[0][self.player_id]
+			for element in self.history[1:]:
+				if element[1-self.player_id] == 0:
+					if my_previous_action == 0:
+						reaction_to_0 += 1
+					elif my_previous_action == 1:
+						reaction_to_1 += 1
+
+			total_0 = sum(1 for (row_a, _, _, _) in self.history[:-1] if row_a == 0)
+			total_1 = sum(1 for (row_a, _, _, _) in self.history[:-1] if row_a == 1)
+			p_0 = reaction_to_0 / total_0 if total_0 > 0 else 0
+			p_1 = reaction_to_1 / total_1 if total_1 > 0 else 0
+		
+		p_value_difference = self.fisher_exact_numpy(reaction_to_0, total_0, reaction_to_1, total_1)
+		
+		if p_value_difference >= alpha:
+			return False, None
+		else:
+			p = p_0 if self.history[-1][self.player_id] == 0 else p_1
+			if self.player_id==0:
+				exp0 = p * self.my_payoffs[0, 0] + (1 - p) * self.my_payoffs[0, 1]
+				exp1 = p * self.my_payoffs[1, 0] + (1 - p) * self.my_payoffs[1, 1]
+				action = 0 if exp0 > exp1 else 1
+			elif self.player_id==1:
+				exp0 = p * self.my_payoffs[0, 0] + (1 - p) * self.my_payoffs[1, 0]  
+				exp1 = p * self.my_payoffs[0, 1] + (1 - p) * self.my_payoffs[1, 1]  
+				action = 0 if exp0 > exp1 else 1
+		return True, action
+
+
 	def _zero_sum_OR_mixed_strategy(self) -> int:
 		"""
 		If the game is zero-sum with a mixed NE, play the the mixed NE strategy.
@@ -670,18 +768,25 @@ class MyAgent(Agent):
 		mixed = self.analysis.get("mixed_nash", None)
 		if isinstance(mixed, list) and len(mixed)[0] == 2:
 			mixed = mixed[0]  # if multiple mixed equilibria, just take the first one (should not happen in 2x2) but again dont wanna fail grading
+
+		opp_lagging_response, action = self._check_opp_for_history1_responses(alpha=self.ALPHA)
+		if opp_lagging_response:
+			return action
+
 		if mixed is not None:
 			# We register wether opponent is holding itself to the mixed NE, so we can detect if they are non-stationary/reactive and switch to best response if needed
-			for window, deviation_threshold in [(self.SHORT_WINDOW, self.DEVIATION_THRESHOLD_SHORT), (self.WINDOW, self.DEVIATION_THRESHOLD)]:	
+			for window, alpha in [(self.SHORT_WINDOW, self.ALPHA_SHORT), (self.WINDOW, self.ALPHA)]:	
 				if len(self.history)>=window:
 					recent_history = self.history[-window:]
 					opp0 = sum(1 for (_,opp_a,_,_) in recent_history if opp_a == 0)
 					opp1 = len(recent_history) - opp0
 					emp_0 = opp0 / len(recent_history)  # empirical frequency opponent plays 0
 					emp_1 = 1 - emp_0
-					# statistical test if emp_= is significantly different from mixed[0] (the q in the mixed NE) could be added here, but for simplicity we just check if the absolute difference exceeds a threshold
+					# statistical test if emp_0= is significantly different from mixed[1] (the q in the mixed NE) 
+					p_value = self._binom_test_numpy(opp0, len(recent_history), mixed[1])
+					# print(f"Window {window}: theoretical {mixed[1]}, empirical {emp_0} , p-value={p_value:.4f}, alpha={alpha}")
 					# If opponent deviates significantly from the mixed NE, switch to best response
-					if abs(emp_0 - mixed[1]) > deviation_threshold:
+					if p_value < alpha:
 						if self.player_id == 0:  # row player: best empirical response to q
 							exp0 = emp_0 * self.A[0, 0] + emp_1 * self.A[0, 1]
 							exp1 = emp_0 * self.A[1, 0] + emp_1 * self.A[1, 1]
@@ -690,7 +795,7 @@ class MyAgent(Agent):
 							exp0 = emp_0 * self.B[0, 0] + emp_1 * self.B[1, 0]  
 							exp1 = emp_0 * self.B[0, 1] + emp_1 * self.B[1, 1]  
 							return 0 if exp0 > exp1 else 1
-						break
+						
 
 
 			p, q = mixed
@@ -748,9 +853,6 @@ class MyAgent(Agent):
 	def get_analysis(self) -> dict:
 		"""Returns the game analysis dictionary for grading."""
 		return self.analysis
-
-
-
 
 
 class MixedNEAgent(Agent):
