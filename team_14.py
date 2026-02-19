@@ -404,12 +404,12 @@ class MyAgent(Agent):
 		self.general_min_rounds = 10 #only start exploring after initial observations
 
 		###ZERO SUM AND MIXED NE (Floris):
-		self.WINDOW = 30
+		self.SHORT_WINDOW = 10
+		self.DEVIATION_THRESHOLD_SHORT = 0.2
+		self.WINDOW = 20
 		self.DEVIATION_THRESHOLD = 0.1
 
-		self.SHORT_WINDOW = 5
-		self.DEVIATION_THRESHOLD_SHORT = 0.2
-
+		
 	
 
 	def get_action(self) -> int:
@@ -672,23 +672,25 @@ class MyAgent(Agent):
 			mixed = mixed[0]  # if multiple mixed equilibria, just take the first one (should not happen in 2x2) but again dont wanna fail grading
 		if mixed is not None:
 			# We register wether opponent is holding itself to the mixed NE, so we can detect if they are non-stationary/reactive and switch to best response if needed
-			if len(self.history)>=self.WINDOW:
-				recent_history = self.history[-self.WINDOW:]
-				opp0 = sum(1 for (_,opp_a,_,_) in recent_history if opp_a == 0)
-				opp1 = len(recent_history) - opp0
-				emp_0 = opp0 / len(recent_history)  # empirical frequency opponent plays 0
-				emp_1 = 1 - emp_0
-				# statistical test if emp_= is significantly different from mixed[0] (the q in the mixed NE) could be added here, but for simplicity we just check if the absolute difference exceeds a threshold
-				# If opponent deviates significantly from the mixed NE, switch to best response
-				if abs(emp_0 - mixed[1]) > self.DEVIATION_THRESHOLD:
-					if self.player_id == 0:  # row player: best empirical response to q
-						exp0 = emp_0 * self.A[0, 0] + emp_1 * self.A[0, 1]
-						exp1 = emp_0 * self.A[1, 0] + emp_1 * self.A[1, 1]
-						return 0 if exp0 > exp1 else 1
-					else:  # column player: best empirical response to p
-						exp0 = emp_0 * self.B[0, 0] + emp_1 * self.B[1, 0]  
-						exp1 = emp_0 * self.B[0, 1] + emp_1 * self.B[1, 1]  
-						return 0 if exp0 > exp1 else 1
+			for window, deviation_threshold in [(self.SHORT_WINDOW, self.DEVIATION_THRESHOLD_SHORT), (self.WINDOW, self.DEVIATION_THRESHOLD)]:	
+				if len(self.history)>=window:
+					recent_history = self.history[-window:]
+					opp0 = sum(1 for (_,opp_a,_,_) in recent_history if opp_a == 0)
+					opp1 = len(recent_history) - opp0
+					emp_0 = opp0 / len(recent_history)  # empirical frequency opponent plays 0
+					emp_1 = 1 - emp_0
+					# statistical test if emp_= is significantly different from mixed[0] (the q in the mixed NE) could be added here, but for simplicity we just check if the absolute difference exceeds a threshold
+					# If opponent deviates significantly from the mixed NE, switch to best response
+					if abs(emp_0 - mixed[1]) > deviation_threshold:
+						if self.player_id == 0:  # row player: best empirical response to q
+							exp0 = emp_0 * self.A[0, 0] + emp_1 * self.A[0, 1]
+							exp1 = emp_0 * self.A[1, 0] + emp_1 * self.A[1, 1]
+							return 0 if exp0 > exp1 else 1
+						else:  # column player: best empirical response to p
+							exp0 = emp_0 * self.B[0, 0] + emp_1 * self.B[1, 0]  
+							exp1 = emp_0 * self.B[0, 1] + emp_1 * self.B[1, 1]  
+							return 0 if exp0 > exp1 else 1
+						break
 
 
 			p, q = mixed

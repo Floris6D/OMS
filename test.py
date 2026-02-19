@@ -170,7 +170,7 @@ def gen_symmetric_shuffle():
 
 generators = {
         "zero_sum": gen_zero_sum,
-        "mixed_only": gen_mixed_only,
+        "mixed": gen_mixed_only,
         "coordination": gen_coordination,
         "anti_coordination": gen_anti_coordination,
         "prisoners_dilemma": gen_prisoners_dilemma,
@@ -215,44 +215,51 @@ def test_analysis():
 
 
 
-def test_strategy(gametype, N, titfortat_baseline = False, only_row =True):
+def test_strategy(gametype, N, baseline = False, only_row =True):
     from competition import Competition
     from example_agents import AlwaysZero, AlwaysOne, RandomPlayer, TitForTat, WinStayLoseShift, BestResponder
+    from team_14 import MixedNEAgent
     agents = { "AlwaysZero": AlwaysZero,
                "AlwaysOne": AlwaysOne,
                 "RandomPlayer": RandomPlayer,
                 "TitForTat": TitForTat, 
                 "WinStayLoseShift": WinStayLoseShift, 
-                "BestResponder": BestResponder}
-    
-    if titfortat_baseline:
-        print("Testing against TitForTat baseline")
-    
+                "BestResponder": BestResponder,
+                "MixedNEAgent": MixedNEAgent,
+                }
     
     results = {}
+    results_baseline = {}
     for name, opponent_cls in agents.items():
         
         results_local =[]
-        
-        my_agent = MyAgent if not titfortat_baseline else TitForTat
+        results_local_baseline = []
         for _ in range(N):
             game = combine_AB(*generate_game(gametype))
             competition = Competition(game)
             if only_row: 
-                result = competition.run(my_agent, opponent_cls)
+                result = competition.run(MyAgent, opponent_cls)
                 results_local.append(result["scores"][0])  # Score of our agent (row player)
             else: 
                 raise NotImplementedError("Testing both row and column agents not implemented yet, set only_row=True to test row agents only")
+            if baseline:
+                competition_baseline = Competition(game)
+                result_baseline = competition_baseline.run(agents[baseline], opponent_cls)
+                results_local_baseline.append(result_baseline["scores"][0])  # Score of TitForTat (row player)
         results[name] = results_local
-    print(f"Results of {'MyAgent' if not titfortat_baseline else 'TitForTat'} against various opponents in {gametype} game:")
+        results_baseline[name] = results_local_baseline
+    print(f"Results of MyAgent against various opponents in {gametype} game:")
     for opponent, scores in results.items():
         avg_score = np.mean(scores)
-        print(f"Against {opponent:<20} | Avg Score = {avg_score:>6.2f} ({np.std(scores):>6.2f}) ")
-
+        addition = " --{}: {:.2f} ({:.2f})".format(baseline, np.mean(results_baseline[opponent]), np.std(results_baseline[opponent])) if baseline else ""
+        print(f"Against {opponent:<20} | Avg Score = {avg_score:>6.2f} ({np.std(scores):>6.2f}) "+ addition)
+    return results, results_baseline
 
 
     
 if __name__ == "__main__":
-    test_strategy("zero_sum", N=100)
+    test_strategy("zero_sum", N=100, baseline = "WinStayLoseShift")
+
+    
 
 
