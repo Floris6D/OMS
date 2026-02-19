@@ -530,7 +530,8 @@ class MyAgent(Agent):
 		if self.game_class == "zero_sum_mixed" or self.game_class =="mixed":
 			return self._zero_sum_OR_mixed_strategy()
 
-		return self._general_adaptive_best_response()
+		return self._general_action_strategy()
+		# return self._general_adaptive_best_response()
 		# return self._play_mixed_or_random()
 	
 
