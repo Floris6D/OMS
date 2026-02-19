@@ -436,6 +436,20 @@ class MyAgent(Agent):
 		# Default: random action (replace this!)
 
 		#####COORDINATION GAME (Janneke)#####
+		t = len(self.history)
+		if t >= 8:
+			opp_actions = [h[1] for h in self.history]  # opponent actions
+			p0 = opp_actions.count(0) / t
+			if p0 >= 0.9 or p0 <= 0.1:
+				opp_fixed = 0 if p0 >= 0.5 else 1
+
+				# Best response to opponent fixed action (true row/col)
+				if self.player_id == 0:   # I am row
+					return int(np.argmax(self.A[:, opp_fixed]))
+				else:                     # I am column
+					return int(np.argmax(self.B[opp_fixed, :]))
+
+
 		if self.game_class == "coordination" and len(self.analysis["pure_nash"]) >= 2:
 			t = len(self.history)
 
@@ -544,13 +558,15 @@ class MyAgent(Agent):
 		"""Return (i,j) of the pure Nash equilibrium that maximizes MY payoff."""
 		best = None
 		best_val = -float("inf")
+
 		for (i, j) in self.analysis["pure_nash"]:
-			val = self.my_payoffs[i, j]  # my payoff at that outcome
+			# (i,j) is always (row_action, col_action)
+			val = self.A[i, j] if self.player_id == 0 else self.B[i, j]
 			if val > best_val:
 				best_val = val
 				best = (i, j)
-		return best
 
+		return best
 
 	def _play_mixed_or_random(self):
 		"""Fallback: play mixed NE if available, else uniform random."""
