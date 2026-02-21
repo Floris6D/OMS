@@ -1,4 +1,5 @@
 from team_14 import MyAgent
+from competition import Competition
 
 
 import numpy as np
@@ -258,10 +259,25 @@ def test_strategy(gametype, N, baseline = False, only_row =True):
         print(f"Against {opponent:<20} | Avg Score = {avg_score:>6.2f} ({np.std(scores):>6.2f}) "+ addition)
     return results, results_baseline
 
+"""
+def test_against_self(N=20, rounds=100):
+    scores = []
+    for _ in range(N):
+        A, B = generate_game("general")
+        game = combine_AB(A, B)
+        comp = Competition(game, num_rounds=rounds)
+        res = comp.run(MyAgent, MyAgent, verbose=False)
+        scores.append(res["scores"])
+    print("Avg scores (row,col):",
+          (sum(s[0] for s in scores)/N, sum(s[1] for s in scores)/N))
 
-    
 if __name__ == "__main__":
-    test_strategy("zero_sum", N=100, baseline = "BestResponder")
+    test_against_self(N=50, rounds=100)
+"""
+
+
+if __name__ == "__main__":
+    test_strategy("general", N=100, baseline = "BestResponder")
 
     
 

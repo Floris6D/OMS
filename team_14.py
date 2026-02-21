@@ -1060,9 +1060,17 @@ class MyAgent(Agent):
 		if self._two_ne_opp_streak >= self.CONCEDE_AFTER_STREAK:
 			return int(other_action)
 
-		# Give up at 20 if we never hit either NE (then fall through to mixed/BR)
+		# Give up at 20 if we do not regularly hit either NE (then fall through to mixed/BR)
 		if t >= self.GIVE_UP_2NE:
-			return None
+			window = self.history[-10:] if t >= 10 else self.history
+			hits = 0
+			for (my_action, opp_action, _, _) in window:
+				outcome = (my_action, opp_action) if self.player_id == 0 else (opp_action, my_action)
+				if outcome == my_ne or outcome == other_ne:
+					hits += 1
+
+			if hits <= len(window) / 2:
+				return None
 
 		return int(my_action)
 	
