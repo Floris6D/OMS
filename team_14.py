@@ -374,9 +374,9 @@ class MyAgent(Agent):
 		######COORDINATION GAME (Janneke)#####
 		self.coordination_target = None
 		self.coordination_target_action = None
-		self.steer_rounds = 6          # how long we push our preferred equilibrium
-		self.concede_after = 4         # how many times opponent must signal other diagonal
-		self.concede_after_streak = 4
+		self.STEER_ROUNDS = 6          # how long we push our preferred equilibrium
+		self.CONCEDE_AFTER = 4         # how many times opponent must signal other diagonal
+		self.CONCEDE_AFTER_STREAK = 4
 		self.opp_diagonal_counts = {0: 0, 1: 0}
 
 		# If this is a coordination game, compute preferred equilibrium
@@ -389,7 +389,7 @@ class MyAgent(Agent):
 			else:  # column player
 				self.coordination_target_action = self.coordination_target[1]
 
-		######HARMONY GAME (Boris)#####
+		######HARMONY GAME (Boris)
 		self.harmony_target = None
 		self.harmony_target_action = None
 		self.harmony_opp_counts = {0: 0, 1: 0}
@@ -398,10 +398,6 @@ class MyAgent(Agent):
 			self.harmony_target = self._preferred_harmony_ne()
 			self.harmony_target_action = self.harmony_target[0] if self.player_id == 0 else self.harmony_target[1]
 
-		###GENERAL GAME (Boris)###
-		self.general_laplace = 1.0
-		self.general_epsilon = 0.08 #exploration rate for other strat
-		self.general_min_rounds = 10 #only start exploring after initial observations
 
 		###ZERO SUM AND MIXED NE (Floris):
 		self.SHORT_WINDOW = 5
@@ -417,6 +413,17 @@ class MyAgent(Agent):
 		self._played_mixed = 0
 		self._times_called = 0
 		self._trigggered_wsly = 0
+
+		###GENERAL GAME (Boris)
+		self.GENERAL_MIXED_ROUNDS = 25
+		self.GENERAL_MONITOR_START = 7
+		self.GENERAL_SWITCH_ROUND = 25
+		self.GENERAL_LAPLACE = 1.0
+		self.GENERAL_SWITCH_THRESHOLD = 0.15
+		self.GIVE_UP_2NE = 20
+
+		self.general_switched_to_br = False	
+		self._two_ne_opp_streak = 0	
 
 		
 	
@@ -465,7 +472,7 @@ class MyAgent(Agent):
 		# 		else:                     # I am column
 		# 			return int(np.argmax(self.B[opp_fixed, :]))
 
-
+		### COORDINATION GAME ###
 		if self.game_class == "coordination" and len(self.analysis["pure_nash"]) >= 2:
 			t = len(self.history)
 
@@ -486,60 +493,34 @@ class MyAgent(Agent):
 				self.opp_diagonal_counts[last_opp] += 1
 
 			# Phase 1: push our preferred equilibrium for a few rounds
-			if t < self.steer_rounds:
+			if t < self.STEER_ROUNDS:
 				return self.coordination_target_action
 
 			# Phase 2: if opponent consistently signals the other diagonal, concede
 			my_target = self.coordination_target_action
 			other = 1 - my_target
 
-			if self.opp_diagonal_counts[other] >= self.concede_after:
+			if self.opp_diagonal_counts[other] >= self.CONCEDE_AFTER:
 				return other
 
 			# Otherwise: keep signaling consistently (no oscillation)
 			return my_target
 		
 
-		###HARMONY GAME (Boris)###
+		### HARMONY GAME ###
 		if self.game_class == "harmony" and self.harmony_target is not None:
-			t = len(self.history)
-
-			if t > 0:
-				last_my, last_opp, _, _ = self.history[-1]
-        		# convert to (row_action, col_action)
-				last_outcome = (last_my, last_opp) if self.player_id == 0 else (last_opp, last_my)
-        		# if we reached the target equilibrium, lock in
-				if last_outcome == self.harmony_target:
-					return int(self.harmony_target_action)
-        		# track opponent's tendency (their last action)
-				self.harmony_opp_counts[last_opp] += 1
-
-			# push target for a while
-			if t < self.steer_rounds:
-				return int(self.harmony_target_action)
-
-			# concede if opponent strongly signals the other diagonal action
-			other = 1 - int(self.harmony_target_action)
-			if last_opp == other:
-				self.harmony_opp_streak +=1
-			else:
-				self.harmony_opp_streak = 0
-			if self.harmony_opp_streak >= self.concede_after_streak:
-				return other
-
-			return int(self.harmony_target_action)		
+			return self._harmony_action_strategy()	
 		
-
-		###DEADLOCK GAME (Boris)#####
+		### DEADLOCK GAME #####
 		if self.game_class == "deadlock":
 			return self._deadlock_action_strategy()
 		
+
+		### ZERO-SUM and MIXED###
 		if self.game_class == "zero_sum_mixed" or self.game_class =="mixed":
 			return self._zero_sum_OR_mixed_strategy()
 
 		return self._general_action_strategy()
-		# return self._general_adaptive_best_response()
-		# return self._play_mixed_or_random()
 	
 
 
@@ -573,34 +554,6 @@ class MyAgent(Agent):
 	# ===== HELPER METHODS (examples) =====
 	# Add your own helper methods below
 	
-	#COORDINATION GAME (Janneke)
-	def _preferred_coordination_ne(self):
-		"""Return (i,j) of the pure Nash equilibrium that maximizes MY payoff."""
-		best = None
-		best_val = -float("inf")
-
-		for (i, j) in self.analysis["pure_nash"]:
-			# (i,j) is always (row_action, col_action)
-			val = self.A[i, j] if self.player_id == 0 else self.B[i, j]
-			if val > best_val:
-				best_val = val
-				best = (i, j)
-
-		return best
-
-	def _play_mixed_or_random(self):
-		"""Fallback: play mixed NE if available, else uniform random."""
-		mixed = self.analysis.get("mixed_nash", None)
-		if mixed is not None:
-			p, q = mixed
-			if self.player_id == 0:  # row player: use p
-				return 0 if np.random.rand() < p else 1
-			else:  # column player: use q
-				return 0 if np.random.rand() < q else 1
-		return int(np.random.rand() < 0.5)
-
-
-
 	def _classify_game(self, verbose=False) -> str:
 		"""
 		Example helper: Classify the game type based on payoff structure.
@@ -614,7 +567,7 @@ class MyAgent(Agent):
 				print(f"{key}: {value}")
 		# Consider: dominant strategies, Nash equilibria, Pareto efficiency
 		if len(self.analysis["pure_nash"])>=1: 
-			#could be, prisonerd dillema, deadlock
+			#could be, prisoners dillema, deadlock
 			if len(self.analysis["pure_nash"]) == 1:
 				if (
 					self.analysis["row_strictly_dominant"] is not None 
@@ -623,8 +576,8 @@ class MyAgent(Agent):
 				):
 					return "prisoners_dilemma"
 				elif (
-					self.analysis["row_strictly_dominant"] is not None 
-					and self.analysis["col_strictly_dominant"] is not None
+					self.analysis["row_weakly_dominant"] is not None 
+					and self.analysis["col_weakly_dominant"] is not None
 					and self.analysis["nash_pareto_optimal"]
 				):
 					return "deadlock" #
@@ -654,26 +607,54 @@ class MyAgent(Agent):
 			return "unknown"
 		
 
-	
+	#COORDINATION GAME
+	def _preferred_coordination_ne(self):
+		"""Return (i,j) of the pure Nash equilibrium that maximizes MY payoff."""
+		best = None
+		best_val = -float("inf")
+
+		for (i, j) in self.analysis["pure_nash"]:
+			# (i,j) is always (row_action, col_action)
+			val = self.A[i, j] if self.player_id == 0 else self.B[i, j]
+			if val > best_val:
+				best_val = val
+				best = (i, j)
+
+		return best
+
+	def _play_mixed_or_random(self):
+		"""Fallback: play mixed NE if available, else uniform random."""
+		mixed = self.analysis.get("mixed_nash", None)
+		if mixed is not None:
+			p, q = mixed
+			if self.player_id == 0:  # row player: use p
+				return 0 if np.random.rand() < p else 1
+			else:  # column player: use q
+				return 0 if np.random.rand() < q else 1
+		return int(np.random.rand() < 0.5)
+
+
+	#DEADLOCK GAME
 	def _deadlock_action_strategy(self) -> int:
 		"""
-        Deadlock: play the (strictly) dominant action if present,
+        Deadlock: play the (weakly) dominant action.
         Fallback: play the action in the unique pure Nash equilibrium. (because of edge cases with tie Pareto optimal outcome)
         """
 
 		if self.player_id == 0: 
-			dom = self.analysis.get("row_strictly_dominant")
+			dom = self.analysis.get("row_weakly_dominant")
 		else:  
-			dom = self.analysis.get("col_strictly_dominant")
+			dom = self.analysis.get("col_weakly_dominant")
        
 		if dom is not None:
 			return int(dom)
        
-        # Fallback (should never be triggered under strict deadlock but protects against edge cases)
+        # Fallback (should never be triggered under deadlock but protects against edge cases)
 		(i, j) = self.analysis["pure_nash"][0]
 		return int(i if self.player_id == 0 else j)
 	
 
+	#HARMONY GAME
 	def _preferred_harmony_ne(self):
 		"""
 		Pick the harmony equilibrium with highest social welfare (A+B).
@@ -689,7 +670,33 @@ class MyAgent(Agent):
 		return best
 	
 
+	def _harmony_action_strategy(self) -> int:
+		t = len(self.history)
+		if t == 0:
+			return int(self.harmony_target_action)
 
+		if t > 0:
+			last_my, last_opp, _, _ = self.history[-1]
+			last_outcome = (last_my, last_opp) if self.player_id == 0 else (last_opp, last_my)
+			if last_outcome == self.harmony_target:
+				return int(self.harmony_target_action)
+
+		# steer phase
+		if t < self.STEER_ROUNDS:
+			return int(self.harmony_target_action)
+
+		# concede if opponent insists on the other diagonal (streak)
+		if t > 0:
+			last_my, last_opp, _, _ = self.history[-1]
+			other = 1 - int(self.harmony_target_action)
+			self.harmony_opp_streak = self.harmony_opp_streak + 1 if last_opp == other else 0
+			if self.harmony_opp_streak >= self.CONCEDE_AFTER_STREAK:
+				return other
+
+		return int(self.harmony_target_action)
+
+
+	#ZERO-SUM AND MIXED NE
 	def _binom_test_numpy(self, k, n, p):
 		# Compute binomial PMF using recursive relation
 		probs = np.zeros(n + 1)
@@ -848,7 +855,6 @@ class MyAgent(Agent):
 		return False, None
 						
 
-
 	def detect_wsls(self, window=10, threshold=0.85):
 		if len(self.history) < window + 1:
 			return False, None  # not enough data
@@ -934,8 +940,6 @@ class MyAgent(Agent):
 		if isinstance(mixed, list) and len(mixed)[0] == 2:
 			mixed = mixed[0]  # if multiple mixed equilibria, just take the first one (should not happen in 2x2) but again dont wanna fail grading
 
-
-
 		opp_playing_wsly, action = self.detect_wsls(window=self.WINDOW, threshold=0.9)
 		if opp_playing_wsly:
 			self._trigggered_wsly += 1
@@ -985,17 +989,25 @@ class MyAgent(Agent):
 			return int(np.random.rand() < 0.5)
 
 
-	def _general_action_strategy(self) -> int:
+	#GENERAL AND UNKNOWN CLASSIFIED GAMES
+	def _my_dominant_action(self):
+		if self.player_id == 0:
+			return self.analysis.get("row_weakly_dominant")
+		else:
+			return self.analysis.get("col_weakly_dominant")
+	
+
+	def _adaptive_best_response(self) -> int:
 		"""
-		We play best response to opponent perceived action frequencies with some epsilon exploration to check if non-stationary
+		We play best response to opponent perceived action frequencies.
 		"""
 		t = len(self.history)
+		if t == 0:
+			return np.random.choice([0,1])
+		
 		opp0 = sum(1 for (_,opp_a,_,_) in self.history if opp_a == 0)
-		opp1 = t - opp0
-
-		#Laplace smoothing
-		a = float(self.general_laplace)
-		q = (opp0 + a) / (t + 2.0 * a) if t > 0 else 0.5  # P(opp plays 0)
+		a = float(self.GENERAL_LAPLACE)
+		q = (opp0 + a) / (t + 2.0 * a)   #frequency of opponent playing 0
 
 		if self.player_id == 0:
 			exp0 = q * self.A[0, 0] + (1 - q) * self.A[0, 1]
@@ -1004,19 +1016,107 @@ class MyAgent(Agent):
 			exp0 = q * self.B[0, 0] + (1 - q) * self.B[1, 0]  
 			exp1 = q * self.B[0, 1] + (1 - q) * self.B[1, 1]  
 
-		if exp0 > exp1:
-			best = 0
-		elif exp1 > exp0:
-			best = 1
+		return 0 if exp0 >= exp1 else 1
+	
+
+	def _two_pure_ne_fallback(self, pure):
+		"""
+		First, steer to the NE that maximizes my payoff for STEER_ROUNDS.
+		Then if opponent insists on the other NE for CONCEDE_AFTER_STREAK rounds, concede.
+		If by round 20 we never hit either NE, return None (fall through to mixed/BR).
+		"""
+		t = len(self.history)
+
+		def my_u(i, j):
+			return self.A[i, j] if self.player_id == 0 else self.B[i, j]
+		ne_a, ne_b = pure
+		if (my_u(*ne_b) > my_u(*ne_a)) or (my_u(*ne_b) == my_u(*ne_a) and ne_b < ne_a):
+			my_ne, other_ne = ne_b, ne_a
 		else:
-			best = np.random.choice([0, 1])
+			my_ne, other_ne = ne_a, ne_b
 
-    	# Epsilon exploration: slightly higher early on helps detect non-stationary / reactive opponents
-		eps = self.general_epsilon if t >= self.general_min_rounds else max(self.general_epsilon, 0.25)
+		my_action = my_ne[0] if self.player_id == 0 else my_ne[1]
+		other_action = other_ne[0] if self.player_id == 0 else other_ne[1]
 
-		if np.random.rand() < eps:
-			return 1 - best
-		return best
+		# If last round already hit either NE, lock in
+		if t > 0:
+			last_my, last_opp, _, _ = self.history[-1]
+			last_outcome = (last_my, last_opp) if self.player_id == 0 else (last_opp, last_my)
+			if last_outcome == my_ne:
+				return int(my_action)
+			if last_outcome == other_ne:
+				return int(other_action)
+
+		if t > 0:
+			last_my, last_opp, _, _ = self.history[-1]
+			opp_target_for_other = other_ne[1] if self.player_id == 0 else other_ne[0]
+			self._two_ne_opp_streak = self._two_ne_opp_streak + 1 if last_opp == opp_target_for_other else 0
+
+		# Steer phase
+		if t < self.STEER_ROUNDS:
+			return int(my_action)
+
+		# Concede if opponent insists
+		if self._two_ne_opp_streak >= self.CONCEDE_AFTER_STREAK:
+			return int(other_action)
+
+		# Give up at 20 if we never hit either NE (then fall through to mixed/BR)
+		if t >= self.GIVE_UP_2NE:
+			return None
+
+		return int(my_action)
+	
+
+	def _general_action_strategy(self) -> int:
+		t = len(self.history)
+		pure = self.analysis.get("pure_nash", [])
+		mixed = self.analysis.get("mixed_nash")
+
+		#Play dominant action if possible
+		dom = self._my_dominant_action()
+		if dom is not None:
+			return int(dom)
+
+		#If there is a pure Nash, play that, if there are 2 play with highest welfare
+		if len(pure) == 1:
+			i, j = pure[0]
+			return int(i if self.player_id == 0 else j)
+		if len(pure) == 2:
+			a = self._two_pure_ne_fallback(pure)
+			if a is not None:
+				return a
+			
+		#Start with playing Mixed NE, after some rounds check empirical action distribution until "switch round"
+		#If close to Mixed NE, play that, if not play adaptive best response to exploit what is possible
+		if mixed is not None and 0 < mixed[0] < 1 and 0 < mixed[1] < 1:
+
+			if t < self.GENERAL_MIXED_ROUNDS:
+				p = mixed[0] if self.player_id == 0 else mixed[1]
+				return 0 if np.random.rand() < p else 1
+			
+			if self.general_switched_to_br:
+				return self._adaptive_best_response()
+
+			#Start monitoring perceived action distrib after some rounds (opponent may try strategies at the start)
+			if t == self.GENERAL_SWITCH_ROUND:
+				recent = self.history[self.GENERAL_MONITOR_START:] 
+				if len(recent) > 0:
+					opp0 = sum(1 for (_, opp_a, _, _) in recent if opp_a == 0)
+					q_emp = opp0 / len(recent)
+				else:
+					q_emp = 0.5  # fallback
+				q_nash = mixed[1] if self.player_id == 0 else mixed[0]
+
+				if abs(q_emp - q_nash) > self.GENERAL_SWITCH_THRESHOLD:
+					self.general_switched_to_br = True
+					return self._adaptive_best_response()
+
+			# Continue Mixed Nash
+			p = mixed[0] if self.player_id == 0 else mixed[1]
+			return 0 if np.random.rand() < p else 1
+
+		#Fallback
+		return self._adaptive_best_response()
 
 
 
@@ -1030,6 +1130,8 @@ class MyAgent(Agent):
 	def get_analysis(self) -> dict:
 		"""Returns the game analysis dictionary for grading."""
 		return self.analysis
+
+
 
 
 class MixedNEAgent(Agent):
