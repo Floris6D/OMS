@@ -371,13 +371,16 @@ class MyAgent(Agent):
 		self.game_class = self._classify_game(verbose=False)
 
 
-		######COORDINATION GAME (Janneke)#####
+		###### COORDINATION GAME (Janneke) ######
 		self.coordination_target = None
 		self.coordination_target_action = None
 		self.steer_rounds = 3
 		self.concede_after_streak = 3
-		#self.opp_diagonal_counts = {0: 0, 1: 0}
 		self.opp_other_streak = 0
+
+		self.STEER_ROUNDS = 3
+		self.CONCEDE_AFTER_STREAK = 3
+
 
 		# compute preferred equilibrium
 		if self.game_class == "coordination" and len(self.analysis["pure_nash"]) >= 2:
@@ -389,60 +392,26 @@ class MyAgent(Agent):
 			else:  # column
 				self.coordination_target_action = self.coordination_target[1]
 
-		            # --- BoS-like tweak: if diagonals differ a lot and mismatch is costly, concede faster ---
-            def my_pay(i, j):
-                return float(self.A[i, j] if self.player_id == 0 else self.B[i, j])
+			# --- BoS-like tweak: if diagonals differ a lot and mismatch is costly ---
+			def my_pay(i, j):
+				if self.player_id == 0:
+					return float(self.A[i, j])
+				else:
+					return float(self.B[i, j])
 
-            u00 = my_pay(0, 0)
-            u11 = my_pay(1, 1)
-            u01 = my_pay(0, 1)
-            u10 = my_pay(1, 0)
+			u00 = my_pay(0, 0)
+			u11 = my_pay(1, 1)
+			u01 = my_pay(0, 1)
+			u10 = my_pay(1, 0)
 
-            diag_gap = abs(u00 - u11)
-            mismatch_gap = max(u00, u11) - max(u01, u10)
+			diag_gap = abs(u00 - u11)
+			mismatch_gap = max(u00, u11) - max(u01, u10)
 
-            # default robust values
-            self.steer_rounds = 3
-            self.concede_after_streak = 3
+			if diag_gap >= 3.0 and mismatch_gap >= 4.0:
+				self.concede_after_streak = 2
+				
 
-            # if clearly BoS-like, concede faster to avoid long mismatch wars
-            if diag_gap >= 3.0 and mismatch_gap >= 4.0:
-                self.concede_after_streak = 2
-
-
-			# # compare payoff in preferred diagonal vs other diagonal, steering based on payoff
-			# (i_best, j_best) = self.coordination_target
-			# other_diagonals = [ne for ne in self.analysis["pure_nash"] if ne != self.coordination_target]
-			# # safety, if not found keep defaults
-			# if len(other_diagonals) >= 1:
-			# 	(i_other, j_other) = other_diagonals[0]
-
-			# 	def my_pay(i, j):
-			# 		return float(self.A[i, j] if self.player_id == 0 else self.B[i, j])
-
-			# 	V_best = my_pay(i_best, j_best)
-			# 	V_other = my_pay(i_other, j_other)
-
-			# 	# If we push our action and opponent pushes the other action, outcome becomes off-diagonal:
-			# 	my_a = self.coordination_target_action
-			# 	opp_a_other = 1 - my_a
-			# 	# translate (my_a, opp_a_other) -> (row, col)
-			# 	row_m, col_m = (my_a, opp_a_other) if self.player_id == 0 else (opp_a_other, my_a)
-			# 	V_mismatch = my_pay(row_m, col_m)
-
-			# 	delta = V_best - V_other              # value of "winning" the coordination battle
-			# 	penalty = max(1e-9, V_best - V_mismatch)  # per-round cost of mismatch vs best
-
-			# 	r = delta / penalty  # bigger => worth pushing longer
-
-			# 	self.steer_rounds = 3
-			# 	self.concede_after_streak = 3
-
-<<<<<<< Updated upstream
-		######HARMONY GAME (Boris)
-=======
 		######HARMONY GAME (Boris)#####
->>>>>>> Stashed changes
 		self.harmony_target = None
 		self.harmony_target_action = None
 		self.harmony_opp_counts = {0: 0, 1: 0}
@@ -717,19 +686,19 @@ class MyAgent(Agent):
 	#DEADLOCK GAME
 	def _deadlock_action_strategy(self) -> int:
 		"""
-        Deadlock: play the (weakly) dominant action.
-        Fallback: play the action in the unique pure Nash equilibrium. (because of edge cases with tie Pareto optimal outcome)
-        """
+		Deadlock: play the (weakly) dominant action.
+		Fallback: play the action in the unique pure Nash equilibrium. (because of edge cases with tie Pareto optimal outcome)
+		"""
 
 		if self.player_id == 0: 
 			dom = self.analysis.get("row_weakly_dominant")
 		else:  
 			dom = self.analysis.get("col_weakly_dominant")
-       
+	   
 		if dom is not None:
 			return int(dom)
-       
-        # Fallback (should never be triggered under deadlock but protects against edge cases)
+	   
+		# Fallback (should never be triggered under deadlock but protects against edge cases)
 		(i, j) = self.analysis["pure_nash"][0]
 		return int(i if self.player_id == 0 else j)
 	
@@ -1346,12 +1315,12 @@ if __name__ == "__main__":
  #   for fname in ["battle_of_sexes.txt", "chicken.txt", "grade.txt"]:
   #      payoff = load_game(f"games/{fname}")     # shape (2,2,2)
    #     A = payoff[:, :, 0]                      # row payoffs (2,2)
-    #    B = payoff[:, :, 1]                      # col payoffs (2,2)
+	#    B = payoff[:, :, 1]                      # col payoffs (2,2)
 
-     #   print("\nGame:", fname)
-      #  print("A=\n", A)
-       # print("B=\n", B)
-        #print(analyze_game(A, B))
+	 #   print("\nGame:", fname)
+	  #  print("A=\n", A)
+	   # print("B=\n", B)
+		#print(analyze_game(A, B))
 
 
 
