@@ -381,18 +381,14 @@ class MyAgent(Agent):
 		self.STEER_ROUNDS = 3
 		self.CONCEDE_AFTER_STREAK = 3
 
-
-		# compute preferred equilibrium
 		if self.game_class == "coordination" and len(self.analysis["pure_nash"]) >= 2:
 			self.coordination_target = self._preferred_coordination_ne()
 
-			# determine my action corresponding to that equilibrium
-			if self.player_id == 0:  # row
+			if self.player_id == 0:  
 				self.coordination_target_action = self.coordination_target[0]
-			else:  # column
+			else:  
 				self.coordination_target_action = self.coordination_target[1]
 
-			# --- BoS-like tweak: if diagonals differ a lot and mismatch is costly ---
 			def my_pay(i, j):
 				if self.player_id == 0:
 					return float(self.A[i, j])
@@ -487,11 +483,9 @@ class MyAgent(Agent):
 			my_target = int(self.coordination_target_action)
 			other = 1 - my_target
 
-			# If last round achieved our target equilibrium, lock in.
 			if t > 0:
 				last_my, last_opp, _, _ = self.history[-1]
 
-				# Convert to (row_action, col_action)
 				if self.player_id == 0:
 					last_outcome = (last_my, last_opp)
 				else:
@@ -501,31 +495,26 @@ class MyAgent(Agent):
 					self.opp_other_streak = 0
 					return my_target
 
-				# streak-based concede signal (robust to noise)
 				if last_opp == other:
 					self.opp_other_streak += 1
 				else:
 					self.opp_other_streak = 0
 				
-				# noise; if no diagonals forming, stop steering
 				if t >= 12:
 					recent = self.history[-12:]
 					diag = 0
 					for my_a, opp_a, *_ in recent:
 						row_a, col_a = (my_a, opp_a) if self.player_id == 0 else (opp_a, my_a)
 						diag += (row_a == col_a)
-					if (diag / 12.0) < 0.55:
+					if (diag / 12.0) < 0.6:
 						return self._best_response_no_explore()
 					
-			# Phase 1: push our preferred equilibrium for a few rounds
 			if t < self.steer_rounds:
 				return my_target
 
-			# Phase 2: concede if opponent clearly insists on the other diagonal
 			if self.opp_other_streak >= self.concede_after_streak:
 				return other
 
-			# Otherwise: keep signaling consistently (no oscillation)
 			return my_target
 
 		
