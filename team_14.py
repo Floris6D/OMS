@@ -374,22 +374,75 @@ class MyAgent(Agent):
 		######COORDINATION GAME (Janneke)#####
 		self.coordination_target = None
 		self.coordination_target_action = None
-		self.STEER_ROUNDS = 6          # how long we push our preferred equilibrium
-		self.CONCEDE_AFTER = 4         # how many times opponent must signal other diagonal
-		self.CONCEDE_AFTER_STREAK = 4
-		self.opp_diagonal_counts = {0: 0, 1: 0}
+		self.steer_rounds = 3
+		self.concede_after_streak = 3
+		#self.opp_diagonal_counts = {0: 0, 1: 0}
+		self.opp_other_streak = 0
 
-		# If this is a coordination game, compute preferred equilibrium
+		# compute preferred equilibrium
 		if self.game_class == "coordination" and len(self.analysis["pure_nash"]) >= 2:
 			self.coordination_target = self._preferred_coordination_ne()
 
-			# Determine my action corresponding to that equilibrium
-			if self.player_id == 0:  # row player
+			# determine my action corresponding to that equilibrium
+			if self.player_id == 0:  # row
 				self.coordination_target_action = self.coordination_target[0]
-			else:  # column player
+			else:  # column
 				self.coordination_target_action = self.coordination_target[1]
 
+		            # --- BoS-like tweak: if diagonals differ a lot and mismatch is costly, concede faster ---
+            def my_pay(i, j):
+                return float(self.A[i, j] if self.player_id == 0 else self.B[i, j])
+
+            u00 = my_pay(0, 0)
+            u11 = my_pay(1, 1)
+            u01 = my_pay(0, 1)
+            u10 = my_pay(1, 0)
+
+            diag_gap = abs(u00 - u11)
+            mismatch_gap = max(u00, u11) - max(u01, u10)
+
+            # default robust values
+            self.steer_rounds = 3
+            self.concede_after_streak = 3
+
+            # if clearly BoS-like, concede faster to avoid long mismatch wars
+            if diag_gap >= 3.0 and mismatch_gap >= 4.0:
+                self.concede_after_streak = 2
+
+
+			# # compare payoff in preferred diagonal vs other diagonal, steering based on payoff
+			# (i_best, j_best) = self.coordination_target
+			# other_diagonals = [ne for ne in self.analysis["pure_nash"] if ne != self.coordination_target]
+			# # safety, if not found keep defaults
+			# if len(other_diagonals) >= 1:
+			# 	(i_other, j_other) = other_diagonals[0]
+
+			# 	def my_pay(i, j):
+			# 		return float(self.A[i, j] if self.player_id == 0 else self.B[i, j])
+
+			# 	V_best = my_pay(i_best, j_best)
+			# 	V_other = my_pay(i_other, j_other)
+
+			# 	# If we push our action and opponent pushes the other action, outcome becomes off-diagonal:
+			# 	my_a = self.coordination_target_action
+			# 	opp_a_other = 1 - my_a
+			# 	# translate (my_a, opp_a_other) -> (row, col)
+			# 	row_m, col_m = (my_a, opp_a_other) if self.player_id == 0 else (opp_a_other, my_a)
+			# 	V_mismatch = my_pay(row_m, col_m)
+
+			# 	delta = V_best - V_other              # value of "winning" the coordination battle
+			# 	penalty = max(1e-9, V_best - V_mismatch)  # per-round cost of mismatch vs best
+
+			# 	r = delta / penalty  # bigger => worth pushing longer
+
+			# 	self.steer_rounds = 3
+			# 	self.concede_after_streak = 3
+
+<<<<<<< Updated upstream
 		######HARMONY GAME (Boris)
+=======
+		######HARMONY GAME (Boris)#####
+>>>>>>> Stashed changes
 		self.harmony_target = None
 		self.harmony_target_action = None
 		self.harmony_opp_counts = {0: 0, 1: 0}
@@ -459,22 +512,11 @@ class MyAgent(Agent):
 		# Default: random action (replace this!)
 
 		#####COORDINATION GAME (Janneke)#####
-		# t = len(self.history)
-		# if t >= 8:
-		# 	opp_actions = [h[1] for h in self.history]  # opponent actions
-		# 	p0 = opp_actions.count(0) / t
-		# 	if p0 >= 0.9 or p0 <= 0.1:
-		# 		opp_fixed = 0 if p0 >= 0.5 else 1
 
-		# 		# Best response to opponent fixed action (true row/col)
-		# 		if self.player_id == 0:   # I am row
-		# 			return int(np.argmax(self.A[:, opp_fixed]))
-		# 		else:                     # I am column
-		# 			return int(np.argmax(self.B[opp_fixed, :]))
-
-		### COORDINATION GAME ###
 		if self.game_class == "coordination" and len(self.analysis["pure_nash"]) >= 2:
 			t = len(self.history)
+			my_target = int(self.coordination_target_action)
+			other = 1 - my_target
 
 			# If last round achieved our target equilibrium, lock in.
 			if t > 0:
@@ -487,27 +529,38 @@ class MyAgent(Agent):
 					last_outcome = (last_opp, last_my)
 
 				if last_outcome == self.coordination_target:
-					return self.coordination_target_action
+					self.opp_other_streak = 0
+					return my_target
 
-				# Track opponent tendency for 0/1
-				self.opp_diagonal_counts[last_opp] += 1
-
+				# streak-based concede signal (robust to noise)
+				if last_opp == other:
+					self.opp_other_streak += 1
+				else:
+					self.opp_other_streak = 0
+				
+				# noise; if no diagonals forming, stop steering
+				if t >= 12:
+					recent = self.history[-12:]
+					diag = 0
+					for my_a, opp_a, *_ in recent:
+						row_a, col_a = (my_a, opp_a) if self.player_id == 0 else (opp_a, my_a)
+						diag += (row_a == col_a)
+					if (diag / 12.0) < 0.55:
+						return self._best_response_no_explore()
+					
 			# Phase 1: push our preferred equilibrium for a few rounds
-			if t < self.STEER_ROUNDS:
-				return self.coordination_target_action
+			if t < self.steer_rounds:
+				return my_target
 
-			# Phase 2: if opponent consistently signals the other diagonal, concede
-			my_target = self.coordination_target_action
-			other = 1 - my_target
-
-			if self.opp_diagonal_counts[other] >= self.CONCEDE_AFTER:
+			# Phase 2: concede if opponent clearly insists on the other diagonal
+			if self.opp_other_streak >= self.concede_after_streak:
 				return other
 
 			# Otherwise: keep signaling consistently (no oscillation)
 			return my_target
-		
 
-		### HARMONY GAME ###
+		
+		###HARMONY GAME (Boris)###
 		if self.game_class == "harmony" and self.harmony_target is not None:
 			return self._harmony_action_strategy()	
 		
@@ -554,6 +607,33 @@ class MyAgent(Agent):
 	# ===== HELPER METHODS (examples) =====
 	# Add your own helper methods below
 	
+	def _preferred_coordination_ne(self):
+		""" return (i,j) of the pure Nash equilibrium that maximizes own payoff."""
+		best = None
+		best_val = -float("inf")
+
+		for (i, j) in self.analysis["pure_nash"]:
+			# (i,j) is always (row_action, col_action)
+			val = self.A[i, j] if self.player_id == 0 else self.B[i, j]
+			if val > best_val:
+				best_val = val
+				best = (i, j)
+
+		return best
+
+	def _play_mixed_or_random(self):
+		"""fallback; play mixed NE if available, otherwise uniform random."""
+		mixed = self.analysis.get("mixed_nash", None)
+		if mixed is not None:
+			p, q = mixed
+			if self.player_id == 0:  # row player: use p
+				return 0 if np.random.rand() < p else 1
+			else:  # column player: use q
+				return 0 if np.random.rand() < q else 1
+		return int(np.random.rand() < 0.5)
+
+
+
 	def _classify_game(self, verbose=False) -> str:
 		"""
 		Example helper: Classify the game type based on payoff structure.
@@ -1125,6 +1205,46 @@ class MyAgent(Agent):
 
 		#Fallback
 		return self._adaptive_best_response()
+
+	def _best_response_no_explore(self) -> int:
+		"""Best response to opponent empirical frequencies without epsilon exploration,when exploration is costly."""
+		t = len(self.history)
+		opp0 = sum(1 for (_, opp_a, _, _) in self.history if opp_a == 0)
+		a = float(self.general_laplace) 
+		q = (opp0 + a) / (t + 2.0 * a) if t > 0 else 0.5 
+
+		if self.player_id == 0:
+			exp0 = q * self.A[0, 0] + (1 - q) * self.A[0, 1]
+			exp1 = q * self.A[1, 0] + (1 - q) * self.A[1, 1]
+		else:
+			exp0 = q * self.B[0, 0] + (1 - q) * self.B[1, 0]
+			exp1 = q * self.B[0, 1] + (1 - q) * self.B[1, 1]
+
+		if exp0 > exp1:
+			return 0
+		if exp1 > exp0:
+			return 1
+		return int(np.random.choice([0, 1]))
+
+	def _best_response_no_explore(self) -> int:
+		"""Best response to opponent empirical frequencies without epsilon exploration,when exploration is costly."""
+		t = len(self.history)
+		opp0 = sum(1 for (_, opp_a, _, _) in self.history if opp_a == 0)
+		a = float(self.general_laplace) 
+		q = (opp0 + a) / (t + 2.0 * a) if t > 0 else 0.5 
+
+		if self.player_id == 0:
+			exp0 = q * self.A[0, 0] + (1 - q) * self.A[0, 1]
+			exp1 = q * self.A[1, 0] + (1 - q) * self.A[1, 1]
+		else:
+			exp0 = q * self.B[0, 0] + (1 - q) * self.B[1, 0]
+			exp1 = q * self.B[0, 1] + (1 - q) * self.B[1, 1]
+
+		if exp0 > exp1:
+			return 0
+		if exp1 > exp0:
+			return 1
+		return int(np.random.choice([0, 1]))
 
 
 
