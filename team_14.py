@@ -378,9 +378,6 @@ class MyAgent(Agent):
 		self.concede_after_streak = 3
 		self.opp_other_streak = 0
 
-		self.STEER_ROUNDS = 3
-		self.CONCEDE_AFTER_STREAK = 3
-
 		if self.game_class == "coordination" and len(self.analysis["pure_nash"]) >= 2:
 			self.coordination_target = self._preferred_coordination_ne()
 
@@ -403,8 +400,19 @@ class MyAgent(Agent):
 			diag_gap = abs(u00 - u11)
 			mismatch_gap = max(u00, u11) - max(u01, u10)
 
-			if diag_gap >= 3.0 and mismatch_gap >= 4.0:
-				self.concede_after_streak = 2
+			if self.player_id == 0:
+				my_payoffs = self.A
+			else:
+				my_payoffs = self.B
+
+			max_payoff = my_payoffs.max()
+			min_payoff = my_payoffs.min()
+			payoff_range = max_payoff - min_payoff
+
+			if payoff_range > 1e-9:
+				if (diag_gap / payoff_range >= 0.30 and
+					mismatch_gap / payoff_range >= 0.40):
+					self.concede_after_streak = 2
 				
 
 		######HARMONY GAME (Boris)#####
@@ -412,6 +420,8 @@ class MyAgent(Agent):
 		self.harmony_target_action = None
 		self.harmony_opp_counts = {0: 0, 1: 0}
 		self.harmony_opp_streak = 0
+		self.STEER_ROUNDS = 3
+		self.CONCEDE_AFTER_STREAK = 3
 		if self.game_class == "harmony" and len(self.analysis["pure_nash"]) == 2:
 			self.harmony_target = self._preferred_harmony_ne()
 			self.harmony_target_action = self.harmony_target[0] if self.player_id == 0 else self.harmony_target[1]
@@ -443,7 +453,6 @@ class MyAgent(Agent):
 		self.general_switched_to_br = False	
 		self._two_ne_opp_streak = 0	
 
-		
 	
 
 	def get_action(self) -> int:
@@ -474,7 +483,6 @@ class MyAgent(Agent):
 		#
 		# ===================================
 		
-		# Default: random action (replace this!)
 
 		#####COORDINATION GAME (Janneke)#####
 
@@ -612,7 +620,6 @@ class MyAgent(Agent):
 
 	#COORDINATION GAME
 	def _preferred_coordination_ne(self):
-		"""Return (i,j) of the pure Nash equilibrium that maximizes MY payoff."""
 		best = None
 		best_val = -float("inf")
 
@@ -624,17 +631,6 @@ class MyAgent(Agent):
 				best = (i, j)
 
 		return best
-
-	def _play_mixed_or_random(self):
-		"""Fallback: play mixed NE if available, else uniform random."""
-		mixed = self.analysis.get("mixed_nash", None)
-		if mixed is not None:
-			p, q = mixed
-			if self.player_id == 0:  # row player: use p
-				return 0 if np.random.rand() < p else 1
-			else:  # column player: use q
-				return 0 if np.random.rand() < q else 1
-		return int(np.random.rand() < 0.5)
 
 
 	#DEADLOCK GAME
