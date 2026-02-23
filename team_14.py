@@ -500,14 +500,6 @@ class MyAgent(Agent):
 				else:
 					self.opp_other_streak = 0
 				
-				if t >= 12:
-					recent = self.history[-12:]
-					diag = 0
-					for my_a, opp_a, *_ in recent:
-						row_a, col_a = (my_a, opp_a) if self.player_id == 0 else (opp_a, my_a)
-						diag += (row_a == col_a)
-					if (diag / 12.0) < 0.6:
-						return self._best_response_no_explore()
 					
 			if t < self.steer_rounds:
 				return my_target
@@ -564,33 +556,6 @@ class MyAgent(Agent):
 
 	# ===== HELPER METHODS (examples) =====
 	# Add your own helper methods below
-	
-	def _preferred_coordination_ne(self):
-		""" return (i,j) of the pure Nash equilibrium that maximizes own payoff."""
-		best = None
-		best_val = -float("inf")
-
-		for (i, j) in self.analysis["pure_nash"]:
-			# (i,j) is always (row_action, col_action)
-			val = self.A[i, j] if self.player_id == 0 else self.B[i, j]
-			if val > best_val:
-				best_val = val
-				best = (i, j)
-
-		return best
-
-	def _play_mixed_or_random(self):
-		"""fallback; play mixed NE if available, otherwise uniform random."""
-		mixed = self.analysis.get("mixed_nash", None)
-		if mixed is not None:
-			p, q = mixed
-			if self.player_id == 0:  # row player: use p
-				return 0 if np.random.rand() < p else 1
-			else:  # column player: use q
-				return 0 if np.random.rand() < q else 1
-		return int(np.random.rand() < 0.5)
-
-
 
 	def _classify_game(self, verbose=False) -> str:
 		"""
@@ -1164,47 +1129,6 @@ class MyAgent(Agent):
 		#Fallback
 		return self._adaptive_best_response()
 
-	def _best_response_no_explore(self) -> int:
-		"""Best response to opponent empirical frequencies without epsilon exploration,when exploration is costly."""
-		t = len(self.history)
-		opp0 = sum(1 for (_, opp_a, _, _) in self.history if opp_a == 0)
-		a = float(self.general_laplace) 
-		q = (opp0 + a) / (t + 2.0 * a) if t > 0 else 0.5 
-
-		if self.player_id == 0:
-			exp0 = q * self.A[0, 0] + (1 - q) * self.A[0, 1]
-			exp1 = q * self.A[1, 0] + (1 - q) * self.A[1, 1]
-		else:
-			exp0 = q * self.B[0, 0] + (1 - q) * self.B[1, 0]
-			exp1 = q * self.B[0, 1] + (1 - q) * self.B[1, 1]
-
-		if exp0 > exp1:
-			return 0
-		if exp1 > exp0:
-			return 1
-		return int(np.random.choice([0, 1]))
-
-	def _best_response_no_explore(self) -> int:
-		"""Best response to opponent empirical frequencies without epsilon exploration,when exploration is costly."""
-		t = len(self.history)
-		opp0 = sum(1 for (_, opp_a, _, _) in self.history if opp_a == 0)
-		a = float(self.general_laplace) 
-		q = (opp0 + a) / (t + 2.0 * a) if t > 0 else 0.5 
-
-		if self.player_id == 0:
-			exp0 = q * self.A[0, 0] + (1 - q) * self.A[0, 1]
-			exp1 = q * self.A[1, 0] + (1 - q) * self.A[1, 1]
-		else:
-			exp0 = q * self.B[0, 0] + (1 - q) * self.B[1, 0]
-			exp1 = q * self.B[0, 1] + (1 - q) * self.B[1, 1]
-
-		if exp0 > exp1:
-			return 0
-		if exp1 > exp0:
-			return 1
-		return int(np.random.choice([0, 1]))
-
-
 
 
 	# ============================================================
@@ -1216,8 +1140,6 @@ class MyAgent(Agent):
 	def get_analysis(self) -> dict:
 		"""Returns the game analysis dictionary for grading."""
 		return self.analysis
-
-
 
 
 class MixedNEAgent(Agent):
@@ -1297,19 +1219,3 @@ if __name__ == "__main__":
 	
 	print(f"\nMyAgent scored: {results['scores'][0]:.2f}")
 	print(f"TitForTat scored: {results['scores'][1]:.2f}")
-
-#if __name__ == "__main__":
- #   from competition import load_game
-#
- #   for fname in ["battle_of_sexes.txt", "chicken.txt", "grade.txt"]:
-  #      payoff = load_game(f"games/{fname}")     # shape (2,2,2)
-   #     A = payoff[:, :, 0]                      # row payoffs (2,2)
-	#    B = payoff[:, :, 1]                      # col payoffs (2,2)
-
-	 #   print("\nGame:", fname)
-	  #  print("A=\n", A)
-	   # print("B=\n", B)
-		#print(analyze_game(A, B))
-
-
-
