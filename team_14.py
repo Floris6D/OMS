@@ -531,6 +531,14 @@ class MyAgent(Agent):
 		if self.game_class == "zero_sum_mixed" or self.game_class =="mixed":
 			return self._zero_sum_OR_mixed_strategy()
 
+		### PRISONERS DILEMMA (MARTIJN)
+		if self.game_class == "prisoners_dilemma":
+			return self.strategy_prisoners_dilemma()
+            
+		### ANTI-COORDINATION
+		elif self.game_class == "anti_coordination":
+			return self.strategy_regret_matching()
+			
 		return self._general_action_strategy()
 	
 
@@ -714,6 +722,76 @@ class MyAgent(Agent):
 		return probs[probs <= p_obs].sum()
 	
 
+	#PRISONERS DILEMMA
+	def strategy_prisoners_dilemma(self) -> int:
+		"""
+		Plays Tit-for-Tat for the Prisoner's Dilemma.
+		Starts by cooperating, then mirrors the opponent's last move.
+		"""
+		# Determine which action is Defect
+		if self.player_id == 0:
+			defect_action = self.analysis.get('row_strictly_dominant')
+		else: # Column Player
+			defect_action = self.analysis.get('col_strictly_dominant')
+		
+		# Safety check: if analysis failed or it's not a PD, default to 0
+		if defect_action is None:
+			return 0
+						
+		# First Round: Always Cooperate
+		if not self.history:
+			return 1 - defect_action
+			
+		# Tit for tat
+		return self.history[-1][1]
+
+	#ANTI-COORDINATION
+	def strategy_regret_matching(self) -> int:
+			"""
+			Implementeert de 'Regret Matching' procedure van Hart & Mas-Colell (2000).
+			"""
+			if not self.history:
+					social_opt = self.analysis.get("social_optimum", [])					
+					if len(social_opt) > 0:
+						best_outcome = social_opt[0]
+						return best_outcome[self.player_id]
+					else:
+						return np.random.choice([0, 1])
+			
+			t = len(self.history)
+			
+			j = self.history[-1][0] 
+			
+			k = 1 - j 
+			
+			sum_diff = 0.0
+			for my_act_tau, opp_act_tau, my_payoff_tau, _ in self.history:
+				if my_act_tau == j:
+					payoff_if_k = self.my_payoffs[k, opp_act_tau]
+					
+					sum_diff += (payoff_if_k - my_payoff_tau)
+					
+			D_t = sum_diff / t 
+			
+			R_t = max(D_t, 0.0)
+			
+
+			max_payoff = np.max(self.my_payoffs)
+			min_payoff = np.min(self.my_payoffs)
+			
+			mu = 2.0 * (max_payoff - min_payoff)
+			if mu <= 0.0:
+				mu = 1.0 
+				
+			prob_k = R_t / mu
+			
+			
+			if np.random.random() < prob_k:
+				return k 
+			else:
+				return j
+				
+	
 	def _normal_cdf(self, x):
 		return 0.5 * (1 + np.erf(x / np.sqrt(2)))
 
