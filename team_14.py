@@ -372,47 +372,14 @@ class MyAgent(Agent):
 
 
 		###### COORDINATION GAME (Janneke) ######
+	
 		self.coordination_target = None
 		self.coordination_target_action = None
-		self.steer_rounds = 3
-		self.concede_after_streak = 3
+		self.steer_rounds = 5
+		self.concede_after_streak = 5
 		self.opp_other_streak = 0
 
-		if self.game_class == "coordination" and len(self.analysis["pure_nash"]) >= 2:
-			self.coordination_target = self._preferred_coordination_ne()
-
-			if self.player_id == 0:  
-				self.coordination_target_action = self.coordination_target[0]
-			else:  
-				self.coordination_target_action = self.coordination_target[1]
-
-			def my_pay(i, j):
-				if self.player_id == 0:
-					return float(self.A[i, j])
-				else:
-					return float(self.B[i, j])
-
-			u00 = my_pay(0, 0)
-			u11 = my_pay(1, 1)
-			u01 = my_pay(0, 1)
-			u10 = my_pay(1, 0)
-
-			diag_gap = abs(u00 - u11)
-			mismatch_gap = max(u00, u11) - max(u01, u10)
-
-			if self.player_id == 0:
-				my_payoffs = self.A
-			else:
-				my_payoffs = self.B
-
-			max_payoff = my_payoffs.max()
-			min_payoff = my_payoffs.min()
-			payoff_range = max_payoff - min_payoff
-
-			if payoff_range > 1e-9:
-				if (diag_gap / payoff_range >= 0.30 and
-					mismatch_gap / payoff_range >= 0.40):
-					self.concede_after_streak = 2
+		self._initialize_coordination_preference()
 				
 
 		######HARMONY GAME (Boris)#####
@@ -486,37 +453,10 @@ class MyAgent(Agent):
 
 		#####COORDINATION GAME (Janneke)#####
 
-		if self.game_class == "coordination" and len(self.analysis["pure_nash"]) >= 2:
-			t = len(self.history)
-			my_target = int(self.coordination_target_action)
-			other = 1 - my_target
-
-			if t > 0:
-				last_my, last_opp, _, _ = self.history[-1]
-
-				if self.player_id == 0:
-					last_outcome = (last_my, last_opp)
-				else:
-					last_outcome = (last_opp, last_my)
-
-				if last_outcome == self.coordination_target:
-					self.opp_other_streak = 0
-					return my_target
-
-				if last_opp == other:
-					self.opp_other_streak += 1
-				else:
-					self.opp_other_streak = 0
-				
-					
-			if t < self.steer_rounds:
-				return my_target
-
-			if self.opp_other_streak >= self.concede_after_streak:
-				return other
-
-			return my_target
-
+		if self.game_class == "coordination":
+			a = self._compute_coordination_action()
+			if a is not None:
+				return a
 		
 		###HARMONY GAME (Boris)###
 		if self.game_class == "harmony" and self.harmony_target is not None:
@@ -632,14 +572,75 @@ class MyAgent(Agent):
 		best_val = -float("inf")
 
 		for (i, j) in self.analysis["pure_nash"]:
-			# (i,j) is always (row_action, col_action)
 			val = self.A[i, j] if self.player_id == 0 else self.B[i, j]
 			if val > best_val:
 				best_val = val
 				best = (i, j)
 
 		return best
+	
+	def _initialize_coordination_preference(self) -> None:
+		if not (self.game_class == "coordination" and len(self.analysis["pure_nash"]) == 2):
+			return
 
+		pure_nash = self.analysis["pure_nash"]
+
+		self.coordination_target = self._preferred_coordination_ne()
+
+		if self.player_id == 0:
+			self.coordination_target_action = self.coordination_target[0]
+			my_payoffs = self.A
+		else:
+			self.coordination_target_action = self.coordination_target[1]
+			my_payoffs = self.B
+
+		def my_pay(i, j):
+			return float(self.A[i, j]) if self.player_id == 0 else float(self.B[i, j])
+
+		ne_payoffs = [my_pay(i, j) for (i, j) in pure_nash]
+		best_ne = max(ne_payoffs)
+
+		all_outcomes = [(0,0), (0,1), (1,0), (1,1)]
+		non_ne = [o for o in all_outcomes if o not in pure_nash]
+		best_non_ne = max(my_pay(i, j) for (i, j) in non_ne)
+
+		diag_gap = abs(ne_payoffs[0] - ne_payoffs[1])
+		mismatch_gap = best_ne - best_non_ne
+
+		payoff_range = float(my_payoffs.max() - my_payoffs.min())
+
+		if payoff_range > 1e-9:
+			if (diag_gap / payoff_range >= 0.30 and mismatch_gap / payoff_range >= 0.40):
+				self.concede_after_streak = 4
+	
+	def _compute_coordination_action(self) -> int | None:
+		if self.coordination_target is None or self.coordination_target_action is None:
+			return None
+
+		t = len(self.history)
+		my_target = int(self.coordination_target_action)
+		other = 1 - my_target
+
+		if t > 0:
+			last_my, last_opp, _, _ = self.history[-1]
+			last_outcome = (last_my, last_opp) if self.player_id == 0 else (last_opp, last_my)
+
+			if last_outcome == self.coordination_target:
+				self.opp_other_streak = 0
+				return my_target
+
+			if last_opp == other:
+				self.opp_other_streak += 1
+			else:
+				self.opp_other_streak = 0
+
+		if t < self.steer_rounds:
+			return my_target
+
+		if self.opp_other_streak >= self.concede_after_streak:
+			return other
+
+		return my_target
 
 	#DEADLOCK GAME
 	def _deadlock_action_strategy(self) -> int:
