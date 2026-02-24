@@ -373,8 +373,8 @@ class MyAgent(Agent):
 		###### COORDINATION GAME (Janneke) ######
 		self.coordination_target = None
 		self.coordination_target_action = None
-		self.steer_rounds = 5
-		self.concede_after_streak = 5
+		self.steer_rounds = 4
+		self.concede_after_streak = 4
 		self.opp_other_streak = 0
 
 		if self.game_class == "coordination":
@@ -572,6 +572,8 @@ class MyAgent(Agent):
 		return best
 	
 	def _initialize_coordination_preference(self) -> None:
+		pure_nash = self.analysis["pure_nash"]		
+	
 		self.coordination_target = self._preferred_coordination_ne()
 		self.coordination_target = (int(self.coordination_target[0]), int(self.coordination_target[1]))
 		self.coordination_target_action = int(self.coordination_target[self.player_id])
@@ -595,7 +597,7 @@ class MyAgent(Agent):
 
 		if payoff_range > 1e-9:
 			if (diag_gap / payoff_range >= 0.30 and mismatch_gap / payoff_range >= 0.40):
-				self.concede_after_streak = 4
+				self.concede_after_streak = 3
 	
 	def _compute_coordination_action(self) -> int:
 		my_target = int(self.coordination_target_action)
