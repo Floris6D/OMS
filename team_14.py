@@ -482,6 +482,9 @@ class MyAgent(Agent):
 
 	
 	def get_action(self) -> int:
+		safe=False
+		if not safe:
+			return self.get_action_unsafe()
 		# Save version, if any error occurs, we do adaptive best response
 		# If that also gives error, we do random
 		# If even numpy fails, we return 0 as a default fallback
@@ -1053,12 +1056,10 @@ class MyAgent(Agent):
 		# determine opponent payoff matrix
 		if self.player_id == 0:
 			opp_matrix = self.B
-			opp_action_index = 1
-			opp_payoff_index = 3
 		else:
 			opp_matrix = self.A
-			opp_action_index = 0
-			opp_payoff_index = 2
+		opp_action_index = 1
+		opp_payoff_index = 3
 
 		# compute opponent's top 2 payoff values
 		flat_payoffs = opp_matrix.flatten()
@@ -1092,13 +1093,10 @@ class MyAgent(Agent):
 
 			if self.player_id == 0:
 				opp_matrix = self.B
-				opp_action = last[1]
-				opp_payoff = last[3]
 			else:
 				opp_matrix = self.A
-				opp_action = last[0]
-				opp_payoff = last[2]
-
+			opp_action = last[1]
+			opp_payoff = last[3]
 			if opp_payoff in top2:
 				predicted_action =  opp_action
 			else:
@@ -1126,8 +1124,9 @@ class MyAgent(Agent):
 		"""
 		self._times_called+=1
 		mixed = self.analysis.get("mixed_nash", None)
-		if isinstance(mixed, list) and len(mixed)[0] == 2:
-			mixed = mixed[0]  # if multiple mixed equilibria, just take the first one (should not happen in 2x2) but again dont wanna fail grading
+		if isinstance(mixed, list):
+			if isinstance(mixed[0], tuple):
+				mixed = mixed[0]  # if multiple mixed equilibria, just take the first one (should not happen in 2x2) but again dont wanna fail grading
 
 		opp_playing_wsly, action = self.detect_wsls(window=self.WINDOW, threshold=0.9)
 		if opp_playing_wsly:
@@ -1274,6 +1273,14 @@ class MyAgent(Agent):
 		if dom is not None:
 			return int(dom)
 
+		if t >= self.NO_COORD_CHECK_START:
+			#If we are in the general category but we detect no coordination, we switch to zero-sum/mixed strategy (which also covers the case where there is actually a mixed NE)
+			recent_history = self.history[-self.NO_COORD_CHECK_WINDOW:]
+			coord_count = sum(1 for (my_a, opp_a, _, _) in recent_history if (my_a, opp_a) in pure)
+			if coord_count / len(recent_history) <= self.NO_COORD_CHECK_THRESHOLD:
+				self.NO_COORD_FLAG = True
+				return self._zero_sum_OR_mixed_strategy()
+			
 		#If there is a pure Nash, play that, if there are 2 play with highest welfare
 		if len(pure) == 1:
 			i, j = pure[0]
