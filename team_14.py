@@ -631,7 +631,7 @@ class MyAgent(Agent):
 				elif self.analysis["is_anti_coordination"]:
 					return "anti_coordination"
 				elif self.game_class == "high_payoff_anti_coordination":
-					return self.strategy_always_hawk()
+					return "high_payoff_anti_coordination"
 				else:
 					return "unknown_2NE"
 			
