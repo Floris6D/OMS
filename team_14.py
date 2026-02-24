@@ -101,6 +101,7 @@ def create_empty_analysis() -> dict:
 		# different action (Example: Battle of Sexes)
 		# Value: bool
 		
+		'high_payoff_anti_coordination': False,
 		'is_coordination': False,
 		
 		# Anti-coordination game: both players prefer if the opponent plays a different
@@ -321,11 +322,9 @@ def analyze_game(A: np.ndarray, B: np.ndarray) -> dict:
 	col_anti = (B[1, 0] >= B[0, 0]) and (B[0, 1] >= B[1, 1])
 	analysis["is_anti_coordination"] = bool(row_anti and col_anti)
 
-		# ============================================================
+	# ============================================================
 	# HIGH PAYOFF ANTI-COORDINATION ANALYSIS
 	# ============================================================
-	analysis["high_payoff_anti_coordination"] = False
-
 	if analysis["is_anti_coordination"] and len(pure_nash) == 2:
 		nash1, nash2 = pure_nash
 		
@@ -539,11 +538,6 @@ class MyAgent(Agent):
 		### DEADLOCK GAME #####
 		elif self.game_class == "deadlock":
 			return self._deadlock_action_strategy()
-		
-
-		### ZERO-SUM and MIXED###
-		elif self.game_class == "zero_sum_mixed" or self.game_class =="mixed":
-			return self._zero_sum_OR_mixed_strategy()
 
 		### PRISONERS DILEMMA (MARTIJN)
 		elif self.game_class == "prisoners_dilemma":
@@ -552,6 +546,15 @@ class MyAgent(Agent):
 		### ANTI-COORDINATION
 		elif self.game_class == "anti_coordination":
 			return self.strategy_regret_matching()
+		elif self.game_class == "high_payoff_anti_coordination":
+			return self.strategy_always_hawk()
+		
+
+		### ZERO-SUM and MIXED###
+		elif self.game_class == "zero_sum_mixed" or self.game_class =="mixed":
+			return self._zero_sum_OR_mixed_strategy()
+		
+
 		elif "unknown" in self.game_class:
 			return self._general_action_strategy()
 		else:
@@ -630,7 +633,7 @@ class MyAgent(Agent):
 					return "coordination"
 				elif self.analysis["is_anti_coordination"]:
 					return "anti_coordination"
-				elif self.game_class == "high_payoff_anti_coordination":
+				elif self.analysis["high_payoff_anti_coordination"]:
 					return "high_payoff_anti_coordination"
 				else:
 					return "unknown_2NE"
