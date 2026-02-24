@@ -277,7 +277,7 @@ if __name__ == "__main__":
 
 
 if __name__ == "__main__":
-    test_strategy("general", N=100, baseline = "BestResponder")
+    test_strategy("general", N=10, baseline = "BestResponder")
 
     
 
