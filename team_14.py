@@ -474,6 +474,18 @@ class MyAgent(Agent):
 
 	
 	def get_action(self) -> int:
+		#save version, if any error occurs, we do adaptive best response
+		# if that also gives error, we do random
+		try:
+			return self.get_action_unsafe()
+		except Exception as e:
+			try:
+				return self._adaptive_best_response()
+			except Exception as e2:
+				return np.random.choice([0, 1])
+		
+
+	def get_action_unsafe(self) -> int:
 		"""
 		Return your action for this round: 0 or 1.
 		
@@ -1275,8 +1287,11 @@ class MyAgent(Agent):
 			p = mixed[0] if self.player_id == 0 else mixed[1]
 			return 0 if np.random.rand() < p else 1
 
-		#Fallback
-		return self._adaptive_best_response()
+		#Fallback to Floris' functie, die checkt op een paar dingen en heeft uiteindelijk fallback van adaptive best response
+		return self._zero_sum_OR_mixed_strategy()
+
+		# #Fallback
+		# return self._adaptive_best_response()
 
 
 
