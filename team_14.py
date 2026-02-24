@@ -481,7 +481,7 @@ class MyAgent(Agent):
 
 	
 	def get_action(self) -> int:
-		safe=False
+		safe=True
 		if not safe:
 			return self.get_action_unsafe()
 		# Save version, if any error occurs, we do adaptive best response
@@ -1181,8 +1181,7 @@ class MyAgent(Agent):
 			else:  # column player: use q
 				return 0 if np.random.rand() < q else 1
 		else:
-			print(" << _zero_sum_OR_mixed_strategy called but no mixed NE found, should not happen >> ")
-			return int(np.random.rand() < 0.5)
+			return self._adaptive_best_response()
 
 
 	#GENERAL AND UNKNOWN CLASSIFIED GAMES
@@ -1280,6 +1279,7 @@ class MyAgent(Agent):
 		dom = self._my_dominant_action()
 		if dom is not None:
 			return int(dom)
+		
 
 		if t >= self.NO_COORD_CHECK_START:
 			#If we are in the general category but we detect no coordination, we switch to zero-sum/mixed strategy (which also covers the case where there is actually a mixed NE)
@@ -1297,12 +1297,12 @@ class MyAgent(Agent):
 			a = self._two_pure_ne_fallback(pure)
 			if a is not None:
 				return a
-
+			
 		#Fallback to Floris' functie, die checkt op een paar dingen en heeft uiteindelijk dezelfde fallbacks als hieronder
 		return self._zero_sum_OR_mixed_strategy()
 		
-		# #Start with playing Mixed NE, after some rounds check empirical action distribution until "switch round"
-		# #If close to Mixed NE, play that, if not play adaptive best response to exploit what is possible
+		#Start with playing Mixed NE, after some rounds check empirical action distribution until "switch round"
+		#If close to Mixed NE, play that, if not play adaptive best response to exploit what is possible
 		# if mixed is not None and 0 < mixed[0] < 1 and 0 < mixed[1] < 1:
 		# 	if t < self.GENERAL_MIXED_ROUNDS:
 		# 		p = mixed[0] if self.player_id == 0 else mixed[1]
