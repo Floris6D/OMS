@@ -321,6 +321,61 @@ def analyze_game(A: np.ndarray, B: np.ndarray) -> dict:
 	col_anti = (B[1, 0] >= B[0, 0]) and (B[0, 1] >= B[1, 1])
 	analysis["is_anti_coordination"] = bool(row_anti and col_anti)
 
+		# ============================================================
+	# HIGH PAYOFF ANTI-COORDINATION ANALYSIS
+	# ============================================================
+	analysis["high_payoff_anti_coordination"] = False
+
+	if analysis["is_anti_coordination"] and len(pure_nash) == 2:
+		nash1, nash2 = pure_nash
+		
+		# Identify each player's preferred coordination (Nash equilibrium)
+		# A's preferred Nash is where A gets a higher payoff
+		if A[nash1] > A[nash2]:
+			my_pref = nash1
+			opp_pref = nash2
+		else:
+			my_pref = nash2
+			opp_pref = nash1
+			
+		# Condition 1: Payoff on preferred coordination >= 2 * Payoff on opponent's preferred coordination
+		# Check this from Row's perspective (A)
+		cond1_row = A[my_pref] >= 2 * A[opp_pref]
+		
+		# For completeness, we should also check Condition 1 from Col's perspective (B)
+		# Col's preferred is opp_pref (since it's anti-coordination, they prefer the opposite)
+		cond1_col = B[opp_pref] >= 2 * B[my_pref] 
+		
+		cond1 = cond1_row and cond1_col
+
+		# Condition 2: Both go for optimum (hawk/hawk) payoff >= 2 * Both go for opponent's optimum (dove/dove)
+		# In anti-coordination, the Nash equilibria are (0,1) and (1,0). 
+		# "Hawk" is the action that yields the high payoff in the preferred Nash.
+		# For Row, if my_pref is (1,0), Hawk is 1. If my_pref is (0,1), Hawk is 0.
+		row_hawk_action = my_pref[0]
+		
+		# For Col, their preferred is opp_pref. 
+		col_hawk_action = opp_pref[1]
+		
+		# Hawk/Hawk outcome
+		hawk_hawk_outcome = (row_hawk_action, col_hawk_action)
+		
+		# Dove/Dove outcome (the other diagonal)
+		row_dove_action = 1 - row_hawk_action
+		col_dove_action = 1 - col_hawk_action
+		dove_dove_outcome = (row_dove_action, col_dove_action)
+		
+		# Check condition 2 for both players
+		cond2_row = A[hawk_hawk_outcome] >= A[dove_dove_outcome] / 2
+		cond2_col = B[hawk_hawk_outcome] >= B[dove_dove_outcome] / 2
+		
+		cond2 = cond2_row and cond2_col
+
+		if cond1 and cond2:
+			analysis["high_payoff_anti_coordination"] = True
+			analysis["is_anti_coordination"] = False
+
+	
 	analysis["zero_sum"] = np.allclose(A + B, 0)
 	if len(analysis["pure_nash"])==2 and analysis["is_coordination"]:
 		nash1, nash2 = analysis["pure_nash"]
@@ -546,6 +601,8 @@ class MyAgent(Agent):
 					return "coordination"
 				elif self.analysis["is_anti_coordination"]:
 					return "anti_coordination"
+				elif self.game_class == "high_payoff_anti_coordination":
+					return self.strategy_always_hawk()
 				else:
 					return "unknown_2NE"
 			
@@ -775,6 +832,39 @@ class MyAgent(Agent):
 				return k 
 			else:
 				return j
+
+	def strategy_always_hawk(self) -> int:
+		"""
+		Always plays the 'Hawk' action in an anti-coordination game.
+		The 'Hawk' action is defined as the move the agent makes in its 
+		preferred Pure Nash Equilibrium (the one yielding the higher payoff).
+		"""
+		pure_nash = self.analysis.get("pure_nash", [])
+		
+		# Safety check: Hawk/Dove logic requires exactly 2 Nash equilibria
+		if len(pure_nash) != 2:
+			return np.random.choice([0, 1])
+			
+		nash1, nash2 = pure_nash
+		
+		# 1. Extract my action and the opponent's action for both equilibria
+		# The pure_nash tuples are always structured as (row_action, col_action)
+		if self.player_id == 0:  # We are the Row player
+			my_act1, opp_act1 = nash1
+			my_act2, opp_act2 = nash2
+		else:                    # We are the Column player
+			opp_act1, my_act1 = nash1
+			opp_act2, my_act2 = nash2
+			
+		# 2. Look up the payoffs for these specific outcomes in our payoff matrix
+		payoff1 = self.my_payoffs[my_act1, opp_act1]
+		payoff2 = self.my_payoffs[my_act2, opp_act2]
+		
+		# 3. Choose the action that corresponds to the highest payoff
+		if payoff1 >= payoff2:
+			return my_act1
+		else:
+			return my_act2
 				
 	
 	def _normal_cdf(self, x):
