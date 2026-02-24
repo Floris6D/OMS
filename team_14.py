@@ -292,7 +292,7 @@ def analyze_game(A: np.ndarray, B: np.ndarray) -> dict:
 	analysis["social_optimum"] = [(i, j) for (i, j) in outcomes if W[i, j] == maxW]
 
 	# price of anarchy
-	ne_outcomes = pure_nash[:]  # mixed welfare is not a single outcome, so ignore for PoA
+	ne_outcomes = pure_nash[:]
 	if len(ne_outcomes) > 0:
 		welfare_ne = [W[i, j] for (i, j) in ne_outcomes]
 		min_ne = float(np.min(welfare_ne))
@@ -370,17 +370,15 @@ class MyAgent(Agent):
 	
 		self.game_class = self._classify_game(verbose=False)
 
-
 		###### COORDINATION GAME (Janneke) ######
-	
 		self.coordination_target = None
 		self.coordination_target_action = None
 		self.steer_rounds = 5
 		self.concede_after_streak = 5
 		self.opp_other_streak = 0
 
-		self._initialize_coordination_preference()
-				
+		if self.game_class == "coordination":
+			self._initialize_coordination_preference()
 
 		######HARMONY GAME (Boris)#####
 		self.harmony_target = None
@@ -392,7 +390,6 @@ class MyAgent(Agent):
 		if self.game_class == "harmony" and len(self.analysis["pure_nash"]) == 2:
 			self.harmony_target = self._preferred_harmony_ne()
 			self.harmony_target_action = self.harmony_target[0] if self.player_id == 0 else self.harmony_target[1]
-
 
 		###ZERO SUM AND MIXED NE (Floris):
 		self.SHORT_WINDOW = 5
@@ -421,7 +418,6 @@ class MyAgent(Agent):
 		self._two_ne_opp_streak = 0	
 
 	
-
 	def get_action(self) -> int:
 		"""
 		Return your action for this round: 0 or 1.
@@ -450,14 +446,11 @@ class MyAgent(Agent):
 		#
 		# ===================================
 		
-
 		#####COORDINATION GAME (Janneke)#####
 
 		if self.game_class == "coordination":
-			a = self._compute_coordination_action()
-			if a is not None:
-				return a
-		
+			return self._compute_coordination_action()
+	
 		###HARMONY GAME (Boris)###
 		if self.game_class == "harmony" and self.harmony_target is not None:
 			return self._harmony_action_strategy()	
@@ -480,7 +473,6 @@ class MyAgent(Agent):
 			return self.strategy_regret_matching()
 			
 		return self._general_action_strategy()
-	
 
 
 	def observe_result(self, my_action: int, opp_action: int,
@@ -580,19 +572,11 @@ class MyAgent(Agent):
 		return best
 	
 	def _initialize_coordination_preference(self) -> None:
-		if not (self.game_class == "coordination" and len(self.analysis["pure_nash"]) == 2):
-			return
-
-		pure_nash = self.analysis["pure_nash"]
-
 		self.coordination_target = self._preferred_coordination_ne()
-
-		if self.player_id == 0:
-			self.coordination_target_action = self.coordination_target[0]
-			my_payoffs = self.A
-		else:
-			self.coordination_target_action = self.coordination_target[1]
-			my_payoffs = self.B
+		self.coordination_target = (int(self.coordination_target[0]), int(self.coordination_target[1]))
+		self.coordination_target_action = int(self.coordination_target[self.player_id])
+		
+		my_payoffs = self.A if self.player_id == 0 else self.B
 
 		def my_pay(i, j):
 			return float(self.A[i, j]) if self.player_id == 0 else float(self.B[i, j])
@@ -613,13 +597,11 @@ class MyAgent(Agent):
 			if (diag_gap / payoff_range >= 0.30 and mismatch_gap / payoff_range >= 0.40):
 				self.concede_after_streak = 4
 	
-	def _compute_coordination_action(self) -> int | None:
-		if self.coordination_target is None or self.coordination_target_action is None:
-			return None
-
-		t = len(self.history)
+	def _compute_coordination_action(self) -> int:
 		my_target = int(self.coordination_target_action)
 		other = 1 - my_target
+
+		t = len(self.history)
 
 		if t > 0:
 			last_my, last_opp, _, _ = self.history[-1]
