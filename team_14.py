@@ -432,6 +432,14 @@ class MyAgent(Agent):
 		self.concede_after_streak = 4
 		self.opp_other_streak = 0
 
+		## FLORIS START
+		self.NO_COORD_CHECK_START = 25 
+		self.NO_COORD_CHECK_THRESHOLD = 0.6 
+		self.NO_COORD_CHECK_WINDOW = 10
+		self.NO_COORD_FLAG = False
+		#FLORIS END
+
+
 		if self.game_class == "coordination":
 			self._initialize_coordination_preference()
 
@@ -474,8 +482,8 @@ class MyAgent(Agent):
 
 	
 	def get_action(self) -> int:
-		#save version, if any error occurs, we do adaptive best response
-		# if that also gives error, we do random
+		# Save version, if any error occurs, we do adaptive best response
+		# If that also gives error, we do random
 		try:
 			return self.get_action_unsafe()
 		except Exception as e:
@@ -519,27 +527,30 @@ class MyAgent(Agent):
 			return self._compute_coordination_action()
 	
 		###HARMONY GAME (Boris)###
-		if self.game_class == "harmony" and self.harmony_target is not None:
+		elif self.game_class == "harmony" and self.harmony_target is not None:
 			return self._harmony_action_strategy()	
 		
 		### DEADLOCK GAME #####
-		if self.game_class == "deadlock":
+		elif self.game_class == "deadlock":
 			return self._deadlock_action_strategy()
 		
 
 		### ZERO-SUM and MIXED###
-		if self.game_class == "zero_sum_mixed" or self.game_class =="mixed":
+		elif self.game_class == "zero_sum_mixed" or self.game_class =="mixed":
 			return self._zero_sum_OR_mixed_strategy()
 
 		### PRISONERS DILEMMA (MARTIJN)
-		if self.game_class == "prisoners_dilemma":
+		elif self.game_class == "prisoners_dilemma":
 			return self.strategy_prisoners_dilemma()
             
 		### ANTI-COORDINATION
 		elif self.game_class == "anti_coordination":
 			return self.strategy_regret_matching()
-			
-		return self._general_action_strategy()
+		elif "unknown" in self.game_class:
+			return self._general_action_strategy()
+		else:
+			print(f"<<get_action_unsafe>> Unrecognized game class: {self.game_class}. Defaulting to random.")
+			return np.random.choice([0, 1])
 
 
 	def observe_result(self, my_action: int, opp_action: int,
@@ -677,7 +688,15 @@ class MyAgent(Agent):
 		if t > 0:
 			last_my, last_opp, _, _ = self.history[-1]
 			last_outcome = (last_my, last_opp) if self.player_id == 0 else (last_opp, last_my)
-
+			##FLORIS start
+			if t >= self.NO_COORD_CHECK_START:
+				recent_history = self.history[-self.NO_COORD_CHECK_WINDOW:]
+				coord_count = sum(1 for (my_a, opp_a, _, _) in recent_history if (my_a, opp_a) in self.analysis["pure_nash"])
+				if coord_count / len(recent_history) <= self.NO_COORD_CHECK_THRESHOLD:
+					self.NO_COORD_FLAG = True
+				if self.NO_COORD_FLAG:
+					return self._zero_sum_OR_mixed_strategy()
+			##FLORIS end
 			if last_outcome == self.coordination_target:
 				self.opp_other_streak = 0
 				return my_target
@@ -1257,38 +1276,39 @@ class MyAgent(Agent):
 			a = self._two_pure_ne_fallback(pure)
 			if a is not None:
 				return a
-			
-		#Start with playing Mixed NE, after some rounds check empirical action distribution until "switch round"
-		#If close to Mixed NE, play that, if not play adaptive best response to exploit what is possible
-		if mixed is not None and 0 < mixed[0] < 1 and 0 < mixed[1] < 1:
 
-			if t < self.GENERAL_MIXED_ROUNDS:
-				p = mixed[0] if self.player_id == 0 else mixed[1]
-				return 0 if np.random.rand() < p else 1
-			
-			if self.general_switched_to_br:
-				return self._adaptive_best_response()
-
-			#Start monitoring perceived action distrib after some rounds (opponent may try strategies at the start)
-			if t == self.GENERAL_SWITCH_ROUND:
-				recent = self.history[self.GENERAL_MONITOR_START:] 
-				if len(recent) > 0:
-					opp0 = sum(1 for (_, opp_a, _, _) in recent if opp_a == 0)
-					q_emp = opp0 / len(recent)
-				else:
-					q_emp = 0.5  # fallback
-				q_nash = mixed[1] if self.player_id == 0 else mixed[0]
-
-				if abs(q_emp - q_nash) > self.GENERAL_SWITCH_THRESHOLD:
-					self.general_switched_to_br = True
-					return self._adaptive_best_response()
-
-			# Continue Mixed Nash
-			p = mixed[0] if self.player_id == 0 else mixed[1]
-			return 0 if np.random.rand() < p else 1
-
-		#Fallback to Floris' functie, die checkt op een paar dingen en heeft uiteindelijk fallback van adaptive best response
+		#Fallback to Floris' functie, die checkt op een paar dingen en heeft uiteindelijk dezelfde fallbacks als hieronder
 		return self._zero_sum_OR_mixed_strategy()
+		
+		# #Start with playing Mixed NE, after some rounds check empirical action distribution until "switch round"
+		# #If close to Mixed NE, play that, if not play adaptive best response to exploit what is possible
+		# if mixed is not None and 0 < mixed[0] < 1 and 0 < mixed[1] < 1:
+		# 	if t < self.GENERAL_MIXED_ROUNDS:
+		# 		p = mixed[0] if self.player_id == 0 else mixed[1]
+		# 		return 0 if np.random.rand() < p else 1
+			
+		# 	if self.general_switched_to_br:
+		# 		return self._adaptive_best_response()
+
+		# 	#Start monitoring perceived action distrib after some rounds (opponent may try strategies at the start)
+		# 	if t == self.GENERAL_SWITCH_ROUND:
+		# 		recent = self.history[self.GENERAL_MONITOR_START:] 
+		# 		if len(recent) > 0:
+		# 			opp0 = sum(1 for (_, opp_a, _, _) in recent if opp_a == 0)
+		# 			q_emp = opp0 / len(recent)
+		# 		else:
+		# 			q_emp = 0.5  # fallback
+		# 		q_nash = mixed[1] if self.player_id == 0 else mixed[0]
+
+		# 		if abs(q_emp - q_nash) > self.GENERAL_SWITCH_THRESHOLD:
+		# 			self.general_switched_to_br = True
+		# 			return self._adaptive_best_response()
+
+		# 	# Continue Mixed Nash
+		# 	p = mixed[0] if self.player_id == 0 else mixed[1]
+		# 	return 0 if np.random.rand() < p else 1
+
+		
 
 		# #Fallback
 		# return self._adaptive_best_response()
