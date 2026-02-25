@@ -543,7 +543,7 @@ class MyAgent(Agent):
 
 		## GENERAL (Safety so remaining games with NE go to general, not directly mixed)
 		# Should not happen because mixed classification is only for mixed probabilities interior to 0 and 1
-		elif self.game_class == "unknown_1NE" or "unknown_2NE":
+		elif self.game_class in ("unknown_1NE", "unknown_2NE"):
 			return self._general_action_strategy()
 
 		### ZERO-SUM and MIXED###
