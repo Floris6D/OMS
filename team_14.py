@@ -971,16 +971,16 @@ class MyAgent(Agent):
 		if len(self.history) >= self.DETERMINISCTIC_DETECTION_START:
 			reaction_to_0 = 1
 			reaction_to_1 = 1 #laplace
-			my_previous_action = self.history[0][self.player_id]
+			my_previous_action = self.history[0][0]
 			for element in self.history[1:]:
-				if element[1-self.player_id] == 0:
+				if element[1] == 0:
 					if my_previous_action == 0:
 						reaction_to_0 += 1
 					elif my_previous_action == 1:
 						reaction_to_1 += 1
 
-			total_0 = sum(1 for (row_a, _, _, _) in self.history[:-1] if row_a == 0) +1
-			total_1 = sum(1 for (row_a, _, _, _) in self.history[:-1] if row_a == 1) + 1 #laplace
+			total_0 = sum(1 for (my_a, _, _, _) in self.history[:-1] if my_a == 0) +1
+			total_1 = sum(1 for (my_a, _, _, _) in self.history[:-1] if my_a == 1) + 1 #laplace
 			p_0 = reaction_to_0 / total_0 if total_0 > 0 else 0
 			p_1 = reaction_to_1 / total_1 if total_1 > 0 else 0
 			p_value_difference = self.fisher_exact_numpy(reaction_to_0, total_0, reaction_to_1, total_1)
@@ -1027,7 +1027,7 @@ class MyAgent(Agent):
 					V = new_V
 
 				# --- 3. Choose optimal action given current state ---
-				current_state = self.history[-1][self.player_id]
+				current_state = self.history[-1][0]
 
 				q0 = immediate_reward(current_state, 0) + gamma * V[0]
 				q1 = immediate_reward(current_state, 1) + gamma * V[1]
