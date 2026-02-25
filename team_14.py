@@ -837,66 +837,50 @@ class MyAgent(Agent):
 	#ANTI-COORDINATION
 	def strategy_regret_matching(self) -> int:
 		"""
-		Implementeert de 'Regret Matching' procedure van Hart & Mas-Colell (2000).
-		Robuust voor zowel Row (0) als Column (1) player.
+		Implementeert 'Regret Matching' (Hart & Mas-Colell, 2000).
+		Geschiedenis is (my_act, opp_act, my_payoff, opp_payoff).
 		"""
 		if not self.history:
-			social_opt = self.analysis.get("social_optimum", [])					
-			if len(social_opt) > 0:
-				best_outcome = social_opt[0]
-				return best_outcome[self.player_id]
-			else:
-				return np.random.choice([0, 1])
-		
+			social_opt = self.analysis.get("social_optimum", [])
+			if social_opt:
+				return int(social_opt[0][self.player_id])
+			return int(np.random.choice([0, 1]))
+
 		t = len(self.history)
-		
-		# 1. Bepaal mijn laatste zet (j) en het alternatief (k) 
-		# De geschiedenis is opgeslagen als (row_act, col_act, row_payoff, col_payoff)
-		if self.player_id == 0:
-			j = self.history[-1][0]  # Mijn actie (Row)
-		else:
-			j = self.history[-1][1]  # Mijn actie (Column)
-			
-		k = 1 - j  
-		
-		# 2. Bereken de spijt over het verleden
+
+		# 1) Mijn laatste zet (j) en alternatief (k)
+		j = int(self.history[-1][0])   # ALWAYS my last action
+		k = 1 - j
+
+		# 2) Bereken gemiddelde spijt over rondes waarin ik j speelde
 		sum_diff = 0.0
-		for row_act, col_act, row_pay, col_pay in self.history:
-			
-			# Vertaal de ronde-data naar 'mijn' perspectief
+		for (my_act_tau, opp_act_tau, my_payoff_tau, _) in self.history:
+			if int(my_act_tau) != j:
+				continue
+
+			# Hypothetical payoff if I had played k against opp_act_tau
 			if self.player_id == 0:
-				my_act_tau = row_act
-				opp_act_tau = col_act
-				my_payoff_tau = row_pay
+				# I am row: outcome (k, opp)
+				payoff_if_k = self.my_payoffs[k, int(opp_act_tau)]
 			else:
-				my_act_tau = col_act
-				opp_act_tau = row_act
-				my_payoff_tau = col_pay
-				
-			# Spijt berekenen we alleen over de rondes waar IK actie j speelde 
-			if my_act_tau == j:
-				# Aanname: self.my_payoffs is geïndexeerd als [mijn_actie, opp_actie]
-				payoff_if_k = self.my_payoffs[k, opp_act_tau]
-				sum_diff += (payoff_if_k - my_payoff_tau)
-					
-		D_t = sum_diff / t 
+				# I am column: outcome (opp, k)
+				payoff_if_k = self.my_payoffs[int(opp_act_tau), k]
+
+			sum_diff += (payoff_if_k - float(my_payoff_tau))
+
+		D_t = sum_diff / t
 		R_t = max(D_t, 0.0)
-		
-		# 3. Bereken kansen om over te stappen
-		max_payoff = np.max(self.my_payoffs)
-		min_payoff = np.min(self.my_payoffs)
-		
-		mu = 2.0 * (max_payoff - min_payoff)
-		if mu <= 0.0:
-			mu = 1.0 
-			
-		prob_k = R_t / mu
-		
-		# 4. Voer de actie uit
-		if np.random.random() < prob_k:
-			return k 
+
+		# 3) Switch probability (clipped)
+		# Use a stable bound; max_payoff should be > 0
+		max_payoff = float(np.max(self.my_payoffs))
+		if max_payoff <= 0:
+			p_switch = 0.5  # fallback
 		else:
-			return j
+			p_switch = min(max(R_t / max_payoff, 0.0), 1.0)
+
+		return int(k if np.random.random() < p_switch else j)	
+
 	def strategy_always_hawk(self) -> int:
 		"""
 		Always plays the 'Hawk' action in an anti-coordination game.
