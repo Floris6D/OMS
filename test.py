@@ -1,4 +1,4 @@
-from team_14 import MyAgent
+from team_4 import MyAgent
 from competition import Competition
 
 
@@ -219,7 +219,7 @@ def test_analysis():
 def test_strategy(gametype, N, baseline = False, only_row =True):
     from competition import Competition
     from example_agents import AlwaysZero, AlwaysOne, RandomPlayer, TitForTat, WinStayLoseShift, BestResponder
-    from team_14 import MixedNEAgent
+    from team_4 import MixedNEAgent
     agents = { "AlwaysZero": AlwaysZero,
                "AlwaysOne": AlwaysOne,
                 "RandomPlayer": RandomPlayer,
@@ -263,7 +263,7 @@ def test_strategy(gametype, N, baseline = False, only_row =True):
 def test_against_self(N=20, rounds=100):
     scores = []
     for _ in range(N):
-        A, B = generate_game("general")
+        A, B = generate_game("anti_coordination")
         game = combine_AB(A, B)
         comp = Competition(game, num_rounds=rounds)
         res = comp.run(MyAgent, MyAgent, verbose=False)
@@ -277,7 +277,7 @@ if __name__ == "__main__":
 
 
 if __name__ == "__main__":
-    test_strategy("symetric_shuffle", N=100, baseline = "BestResponder")
+    test_strategy("deadlock", N=100, baseline = "BestResponder")
 
     
 
