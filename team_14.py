@@ -1002,6 +1002,7 @@ class MyAgent(Agent):
 						reaction_to_0 += 1
 					elif my_previous_action == 1:
 						reaction_to_1 += 1
+				my_previous_action = element[0]
 
 			total_0 = sum(1 for (my_a, _, _, _) in self.history[:-1] if my_a == 0) +1
 			total_1 = sum(1 for (my_a, _, _, _) in self.history[:-1] if my_a == 1) + 1 #laplace
