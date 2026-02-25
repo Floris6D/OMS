@@ -1281,7 +1281,7 @@ class MyAgent(Agent):
 			return int(dom)
 		
 
-		if t >= self.NO_COORD_CHECK_START:
+		if (t >= self.NO_COORD_CHECK_START and len(pure) > 0) or self.NO_COORD_FLAG:
 			#If we are in the general category but we detect no coordination, we switch to zero-sum/mixed strategy (which also covers the case where there is actually a mixed NE)
 			recent_history = self.history[-self.NO_COORD_CHECK_WINDOW:]
 			coord_count = sum(1 for (my_a, opp_a, _, _) in recent_history if (my_a, opp_a) in pure)
