@@ -447,8 +447,8 @@ class MyAgent(Agent):
 		self.harmony_target_action = None
 		self.harmony_opp_counts = {0: 0, 1: 0}
 		self.harmony_opp_streak = 0
-		self.STEER_ROUNDS = 3
-		self.CONCEDE_AFTER_STREAK = 3
+		self.STEER_ROUNDS = 6
+		self.CONCEDE_AFTER_STREAK = 4
 		if self.game_class == "harmony" and len(self.analysis["pure_nash"]) == 2:
 			self.harmony_target = self._preferred_harmony_ne()
 			self.harmony_target_action = self.harmony_target[0] if self.player_id == 0 else self.harmony_target[1]
