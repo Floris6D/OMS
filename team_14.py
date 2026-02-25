@@ -913,19 +913,11 @@ class MyAgent(Agent):
 		
 		# 1. Extract my action and the opponent's action for both equilibria
 		# The pure_nash tuples are always structured as (row_action, col_action)
-		if self.my_payoffs[nash1] <= self.my_payoffs[nash2]:  # Welke nash is beter voor jou
-			if self.player_id == 0:
-				action = nash2[0] #je bent row dus je wil deze action van deze nash
-			else:
-				action = nash2[1] # andersom
-		
-		elif self.my_payoffs[nash1] >= self.my_payoffs[nash2]:
-			if self.player_id == 0:
-				action = nash2[1] #je bent column dus je wil deze action van deze nash
-			else:
-				action = nash2[0] # andersom
+		if self.my_payoffs[nash1] >= self.my_payoffs[nash2]:
+			best_ne = nash1  
+		else: best_ne = nash2
 			
-		return action				
+		return int(best_ne[0] if self.player_id==0 else int(best_ne[1]))			
 	
 	def _normal_cdf(self, x):
 		return 0.5 * (1 + np.erf(x / np.sqrt(2)))
