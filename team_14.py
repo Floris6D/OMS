@@ -365,8 +365,8 @@ def analyze_game(A: np.ndarray, B: np.ndarray) -> dict:
 		dove_dove_outcome = (row_dove_action, col_dove_action)
 		
 		# Check condition 2 for both players
-		cond2_row = A[hawk_hawk_outcome] >= A[dove_dove_outcome] / 2
-		cond2_col = B[hawk_hawk_outcome] >= B[dove_dove_outcome] / 2
+		cond2_row = A[hawk_hawk_outcome] * 2 >= A[dove_dove_outcome]
+		cond2_col = B[hawk_hawk_outcome] * 2 >= B[dove_dove_outcome]
 		
 		cond2 = cond2_row and cond2_col
 
