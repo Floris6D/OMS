@@ -696,7 +696,8 @@ class MyAgent(Agent):
 			##FLORIS start
 			if t >= self.NO_COORD_CHECK_START:
 				recent_history = self.history[-self.NO_COORD_CHECK_WINDOW:]
-				coord_count = sum(1 for (my_a, opp_a, _, _) in recent_history if (my_a, opp_a) in self.analysis["pure_nash"])
+				pure_correct_order = self.analysis["pure_nash"] if self.player_id == 0 else {(j,i) for (i,j) in self.analysis["pure_nash"]}
+				coord_count = sum(1 for (my_a, opp_a, _, _) in recent_history if (my_a, opp_a) in pure_correct_order)
 				if coord_count / len(recent_history) <= self.NO_COORD_CHECK_THRESHOLD:
 					self.NO_COORD_FLAG = True
 				if self.NO_COORD_FLAG:
@@ -783,6 +784,16 @@ class MyAgent(Agent):
 
 	#ZERO-SUM AND MIXED NE
 	def _binom_test_numpy(self, k, n, p):
+		if p==0: 
+			if k==0: 
+				return 1
+			else:
+				return 0
+		elif p==1:
+			if k==n:
+				return 1
+			else:
+				return 0
 		# Compute binomial PMF using recursive relation
 		probs = np.zeros(n + 1)
 
@@ -792,7 +803,7 @@ class MyAgent(Agent):
 		# Use recursive formula:
 		# P(X=i) = P(X=i-1) * (n-i+1)/i * p/(1-p)
 		for i in range(1, n + 1):
-			probs[i] = probs[i - 1] * (n - i + 1) / i * (p / (1 - p))
+			probs[i] = probs[i - 1] * (n - i + 1) / i * (p / (1 - p))	
 
 		p_obs = probs[k]
 
@@ -1252,7 +1263,8 @@ class MyAgent(Agent):
 		if (t >= self.NO_COORD_CHECK_START and len(pure) > 0) or self.NO_COORD_FLAG:
 			#If we are in the general category but we detect no coordination, we switch to zero-sum/mixed strategy (which also covers the case where there is actually a mixed NE)
 			recent_history = self.history[-self.NO_COORD_CHECK_WINDOW:]
-			coord_count = sum(1 for (my_a, opp_a, _, _) in recent_history if (my_a, opp_a) in pure)
+			pure_correct_order = pure if self.player_id == 0 else {(j,i) for (i,j) in pure}
+			coord_count = sum(1 for (my_a, opp_a, _, _) in recent_history if (my_a, opp_a) in pure_correct_order)
 			if coord_count / len(recent_history) <= self.NO_COORD_CHECK_THRESHOLD:
 				self.NO_COORD_FLAG = True
 				return self._zero_sum_OR_mixed_strategy()
