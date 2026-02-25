@@ -431,13 +431,11 @@ class MyAgent(Agent):
 		self.concede_after_streak = 4
 		self.opp_other_streak = 0
 
-		## FLORIS START
+		## No coordination checks
 		self.NO_COORD_CHECK_START = 25 
 		self.NO_COORD_CHECK_THRESHOLD = 0.6 
 		self.NO_COORD_CHECK_WINDOW = 10
 		self.NO_COORD_FLAG = False
-		#FLORIS END
-
 
 		if self.game_class == "coordination":
 			self._initialize_coordination_preference()
@@ -447,8 +445,8 @@ class MyAgent(Agent):
 		self.harmony_target_action = None
 		self.harmony_opp_counts = {0: 0, 1: 0}
 		self.harmony_opp_streak = 0
-		self.STEER_ROUNDS = 6
-		self.CONCEDE_AFTER_STREAK = 4
+		self.STEER_ROUNDS_HARMONY = 6
+		self.CONCEDE_AFTER_STREAK_HARMONY = 4
 		if self.game_class == "harmony" and len(self.analysis["pure_nash"]) == 2:
 			self.harmony_target = self._preferred_harmony_ne()
 			self.harmony_target_action = self.harmony_target[0] if self.player_id == 0 else self.harmony_target[1]
@@ -469,14 +467,7 @@ class MyAgent(Agent):
 		self._trigggered_wsly = 0
 
 		###GENERAL GAME (Boris)
-		self.GENERAL_MIXED_ROUNDS = 25
-		self.GENERAL_MONITOR_START = 7
-		self.GENERAL_SWITCH_ROUND = 25
 		self.GENERAL_LAPLACE = 1.0
-		self.GENERAL_SWITCH_THRESHOLD = 0.15
-		self.GIVE_UP_2NE = 20
-
-		self.general_switched_to_br = False	
 		self._two_ne_opp_streak = 0	
 
 	
@@ -530,7 +521,6 @@ class MyAgent(Agent):
 		# ===================================
 		
 		#####COORDINATION GAME (Janneke)#####
-
 		if self.game_class == "coordination":
 			return self._compute_coordination_action()
 	
@@ -779,7 +769,7 @@ class MyAgent(Agent):
 				return int(self.harmony_target_action)
 
 		# steer phase
-		if t < self.STEER_ROUNDS:
+		if t < self.STEER_ROUNDS_HARMONY:
 			return int(self.harmony_target_action)
 
 		# concede if opponent insists on the other diagonal (streak)
@@ -787,7 +777,7 @@ class MyAgent(Agent):
 			last_my, last_opp, _, _ = self.history[-1]
 			other = 1 - int(self.harmony_target_action)
 			self.harmony_opp_streak = self.harmony_opp_streak + 1 if last_opp == other else 0
-			if self.harmony_opp_streak >= self.CONCEDE_AFTER_STREAK:
+			if self.harmony_opp_streak >= self.CONCEDE_AFTER_STREAK_HARMONY:
 				return other
 
 		return int(self.harmony_target_action)
@@ -1009,13 +999,6 @@ class MyAgent(Agent):
 					Eprev0play1 = p_0 * self.B[0, 1] + (1 - p_0) * self.B[1, 1]
 					Eprev1play0 = p_1 * self.B[0, 0] + (1 - p_1) * self.B[1, 0]
 					Eprev1play1 = p_1 * self.B[0, 1] + (1 - p_1) * self.B[1, 1]
-					# switching_average = (Eprev0play1 + Eprev1play0) / 2
-					# if switching_average > max(Eprev0play0, Eprev1play1):
-					# 	return True, 1 - my_prev_action
-					# elif Eprev1play1 < Eprev0play0:
-					# 	return True, 0
-					# elif Eprev0play0 < Eprev1play1:
-					# 	return True, 1
 					
 				def immediate_reward(state, action):
 					# state = my previous action (0 or 1)
@@ -1248,24 +1231,12 @@ class MyAgent(Agent):
 			self._two_ne_opp_streak = self._two_ne_opp_streak + 1 if last_opp == opp_target_for_other else 0
 
 		# Steer phase
-		if t < self.STEER_ROUNDS:
+		if t < self.steer_rounds:
 			return int(my_action)
 
 		# Concede if opponent insists
-		if self._two_ne_opp_streak >= self.CONCEDE_AFTER_STREAK:
+		if self._two_ne_opp_streak >= self.concede_after_streak:
 			return int(other_action)
-
-		# Give up at 20 if we do not regularly hit either NE (then fall through to mixed/BR)
-		if t >= self.GIVE_UP_2NE:
-			window = self.history[-10:] if t >= 10 else self.history
-			hits = 0
-			for (my_action, opp_action, _, _) in window:
-				outcome = (my_action, opp_action) if self.player_id == 0 else (opp_action, my_action)
-				if outcome == my_ne or outcome == other_ne:
-					hits += 1
-
-			if hits <= len(window) / 2:
-				return None
 
 		return int(my_action)
 	
@@ -1280,7 +1251,6 @@ class MyAgent(Agent):
 		if dom is not None:
 			return int(dom)
 		
-
 		if (t >= self.NO_COORD_CHECK_START and len(pure) > 0) or self.NO_COORD_FLAG:
 			#If we are in the general category but we detect no coordination, we switch to zero-sum/mixed strategy (which also covers the case where there is actually a mixed NE)
 			recent_history = self.history[-self.NO_COORD_CHECK_WINDOW:]
@@ -1298,42 +1268,8 @@ class MyAgent(Agent):
 			if a is not None:
 				return a
 			
-		#Fallback to Floris' functie, die checkt op een paar dingen en heeft uiteindelijk dezelfde fallbacks als hieronder
+		#Fallback to mixed strat
 		return self._zero_sum_OR_mixed_strategy()
-		
-		#Start with playing Mixed NE, after some rounds check empirical action distribution until "switch round"
-		#If close to Mixed NE, play that, if not play adaptive best response to exploit what is possible
-		# if mixed is not None and 0 < mixed[0] < 1 and 0 < mixed[1] < 1:
-		# 	if t < self.GENERAL_MIXED_ROUNDS:
-		# 		p = mixed[0] if self.player_id == 0 else mixed[1]
-		# 		return 0 if np.random.rand() < p else 1
-			
-		# 	if self.general_switched_to_br:
-		# 		return self._adaptive_best_response()
-
-		# 	#Start monitoring perceived action distrib after some rounds (opponent may try strategies at the start)
-		# 	if t == self.GENERAL_SWITCH_ROUND:
-		# 		recent = self.history[self.GENERAL_MONITOR_START:] 
-		# 		if len(recent) > 0:
-		# 			opp0 = sum(1 for (_, opp_a, _, _) in recent if opp_a == 0)
-		# 			q_emp = opp0 / len(recent)
-		# 		else:
-		# 			q_emp = 0.5  # fallback
-		# 		q_nash = mixed[1] if self.player_id == 0 else mixed[0]
-
-		# 		if abs(q_emp - q_nash) > self.GENERAL_SWITCH_THRESHOLD:
-		# 			self.general_switched_to_br = True
-		# 			return self._adaptive_best_response()
-
-		# 	# Continue Mixed Nash
-		# 	p = mixed[0] if self.player_id == 0 else mixed[1]
-		# 	return 0 if np.random.rand() < p else 1
-
-		
-
-		# #Fallback
-		# return self._adaptive_best_response()
-
 
 
 	# ============================================================

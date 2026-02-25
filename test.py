@@ -277,7 +277,7 @@ if __name__ == "__main__":
 
 
 if __name__ == "__main__":
-    test_strategy("harmony", N=10**2, baseline = "BestResponder")
+    test_strategy("symetric_shuffle", N=100, baseline = "BestResponder")
 
     
 
