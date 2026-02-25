@@ -133,12 +133,12 @@ def gen_harmony():
     best = rand(6, 10)
     alt = rand(3, 5)
     low = rand(0, 2)
-
-    A = np.array([[best, alt],
+    eps = 10**(-3)  # small epsilon to ensure strict inequalities
+    A = np.array([[best, alt-eps],
                   [low,  alt]])
 
     B = np.array([[best, low],
-                  [alt,  alt]])
+                  [alt-eps,  alt]])
 
     return A, B
 
@@ -277,7 +277,7 @@ if __name__ == "__main__":
 
 
 if __name__ == "__main__":
-    test_strategy("coordination", N=10**3, baseline = "BestResponder")
+    test_strategy("harmony", N=10**2, baseline = "BestResponder")
 
     
 

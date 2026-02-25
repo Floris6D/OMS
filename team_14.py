@@ -1395,9 +1395,20 @@ class MixedNEAgent(Agent):
 			else:  # column player: use q
 				return 0 if np.random.rand() < q else 1
 		else:
-			print("Warning: No pure or mixed NE found, should not be possible")
-			print("would raise an error but don't want to fail the assignment you know")
-			return np.random.choice([0, 1])
+			#degenerate case with equal payoffs in row or column and 2 NE
+			#play social optimum
+			social_opt = self.analysis.get("social_optimum", [])
+			if len(social_opt) > 0:
+				best_outcome = social_opt[0]
+				return my_action(*best_outcome)
+			else:
+				# if no social optimum (should not happen), play the first pure NE
+				if self.analysis["pure_nash"]:
+					(i, j) = self.analysis["pure_nash"][0]
+					return my_action(i, j)
+				else:
+					# if no NE (should definitely not happen), play randomly
+					return np.random.choice([0, 1])
 
 
 
