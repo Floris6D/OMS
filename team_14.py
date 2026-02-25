@@ -347,7 +347,7 @@ def analyze_game(A: np.ndarray, B: np.ndarray) -> dict:
 		
 		cond1 = cond1_row and cond1_col
 
-		# Condition 2: Both go for optimum (hawk/hawk) payoff >= 2 * Both go for opponent's optimum (dove/dove)
+		# Condition 2: Both go for optimum (hawk/hawk) payoff * 2 >= Both go for opponent's optimum (dove/dove)
 		# In anti-coordination, the Nash equilibria are (0,1) and (1,0). 
 		# "Hawk" is the action that yields the high payoff in the preferred Nash.
 		# For Row, if my_pref is (1,0), Hawk is 1. If my_pref is (0,1), Hawk is 0.
