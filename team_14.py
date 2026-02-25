@@ -836,57 +836,74 @@ class MyAgent(Agent):
 
 	#ANTI-COORDINATION
 	def strategy_regret_matching(self) -> int:
-			"""
-			Implementeert de 'Regret Matching' procedure van Hart & Mas-Colell (2000).
-			"""
-			if not self.history:
-					social_opt = self.analysis.get("social_optimum", [])					
-					if len(social_opt) > 0:
-						best_outcome = social_opt[0]
-						return best_outcome[self.player_id]
-					else:
-						return np.random.choice([0, 1])
-			
-			t = len(self.history)
-			
-			j = self.history[-1][0] 
-			
-			k = 1 - j 
-			
-			sum_diff = 0.0
-			for my_act_tau, opp_act_tau, my_payoff_tau, _ in self.history:
-				if my_act_tau == j:
-					payoff_if_k = self.my_payoffs[k, opp_act_tau]
-					
-					sum_diff += (payoff_if_k - my_payoff_tau)
-					
-			D_t = sum_diff / t 
-			
-			R_t = max(D_t, 0.0)
-			
-
-			max_payoff = np.max(self.my_payoffs)
-			min_payoff = np.min(self.my_payoffs)
-			
-			mu = 2.0 * (max_payoff - min_payoff)
-			if mu <= 0.0:
-				mu = 1.0 
-				
-			prob_k = R_t / mu
-			
-			
-			if np.random.random() < prob_k:
-				return k 
+		"""
+		Implementeert de 'Regret Matching' procedure van Hart & Mas-Colell (2000).
+		Robuust voor zowel Row (0) als Column (1) player.
+		"""
+		if not self.history:
+			social_opt = self.analysis.get("social_optimum", [])					
+			if len(social_opt) > 0:
+				best_outcome = social_opt[0]
+				return best_outcome[self.player_id]
 			else:
-				return j
-
+				return np.random.choice([0, 1])
+		
+		t = len(self.history)
+		
+		# 1. Bepaal mijn laatste zet (j) en het alternatief (k) 
+		# De geschiedenis is opgeslagen als (row_act, col_act, row_payoff, col_payoff)
+		if self.player_id == 0:
+			j = self.history[-1][0]  # Mijn actie (Row)
+		else:
+			j = self.history[-1][1]  # Mijn actie (Column)
+			
+		k = 1 - j  
+		
+		# 2. Bereken de spijt over het verleden
+		sum_diff = 0.0
+		for row_act, col_act, row_pay, col_pay in self.history:
+			
+			# Vertaal de ronde-data naar 'mijn' perspectief
+			if self.player_id == 0:
+				my_act_tau = row_act
+				opp_act_tau = col_act
+				my_payoff_tau = row_pay
+			else:
+				my_act_tau = col_act
+				opp_act_tau = row_act
+				my_payoff_tau = col_pay
+				
+			# Spijt berekenen we alleen over de rondes waar IK actie j speelde 
+			if my_act_tau == j:
+				# Aanname: self.my_payoffs is geïndexeerd als [mijn_actie, opp_actie]
+				payoff_if_k = self.my_payoffs[k, opp_act_tau]
+				sum_diff += (payoff_if_k - my_payoff_tau)
+					
+		D_t = sum_diff / t 
+		R_t = max(D_t, 0.0)
+		
+		# 3. Bereken kansen om over te stappen
+		max_payoff = np.max(self.my_payoffs)
+		min_payoff = np.min(self.my_payoffs)
+		
+		mu = 2.0 * (max_payoff - min_payoff)
+		if mu <= 0.0:
+			mu = 1.0 
+			
+		prob_k = R_t / mu
+		
+		# 4. Voer de actie uit
+		if np.random.random() < prob_k:
+			return k 
+		else:
+			return j
 	def strategy_always_hawk(self) -> int:
 		"""
 		Always plays the 'Hawk' action in an anti-coordination game.
 		The 'Hawk' action is defined as the move the agent makes in its 
 		preferred Pure Nash Equilibrium (the one yielding the higher payoff).
 		"""
-		pure_nash = self.analysis.get("pure_nash", [])
+		pure_nash = self.analysis.get("pure_nash")
 		
 		# Safety check: Hawk/Dove logic requires exactly 2 Nash equilibria
 		if len(pure_nash) != 2:
@@ -896,23 +913,19 @@ class MyAgent(Agent):
 		
 		# 1. Extract my action and the opponent's action for both equilibria
 		# The pure_nash tuples are always structured as (row_action, col_action)
-		if self.player_id == 0:  # We are the Row player
-			my_act1, opp_act1 = nash1
-			my_act2, opp_act2 = nash2
-		else:                    # We are the Column player
-			opp_act1, my_act1 = nash1
-			opp_act2, my_act2 = nash2
-			
-		# 2. Look up the payoffs for these specific outcomes in our payoff matrix
-		payoff1 = self.my_payoffs[my_act1, opp_act1]
-		payoff2 = self.my_payoffs[my_act2, opp_act2]
+		if self.my_payoffs[nash1] <= self.my_payoffs[nash2]:  # Welke nash is beter voor jou
+			if self.player_id == 0:
+				action = nash2[0] #je bent row dus je wil deze action van deze nash
+			else:
+				action = nash2[1] # andersom
 		
-		# 3. Choose the action that corresponds to the highest payoff
-		if payoff1 >= payoff2:
-			return my_act1
-		else:
-			return my_act2
-				
+		elif self.my_payoffs[nash1] >= self.my_payoffs[nash2]:
+			if self.player_id == 0:
+				action = nash2[1] #je bent column dus je wil deze action van deze nash
+			else:
+				action = nash2[0] # andersom
+			
+		return action				
 	
 	def _normal_cdf(self, x):
 		return 0.5 * (1 + np.erf(x / np.sqrt(2)))
