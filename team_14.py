@@ -477,9 +477,7 @@ class MyAgent(Agent):
 			return self.get_action_unsafe()
 		# Save version, if any error occurs, we do adaptive best response
 		# If that also gives error, we do random
-		# If even numpy fails, we return 0 as a default fallback
-		# Big plus, if numpy fails then everyone crashes but us so wwin by default
-		# TODO: hack numpy
+
 		try:
 			try:
 				return self.get_action_unsafe()
