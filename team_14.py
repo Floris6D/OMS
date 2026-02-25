@@ -875,7 +875,7 @@ class MyAgent(Agent):
 		The 'Hawk' action is defined as the move the agent makes in its 
 		preferred Pure Nash Equilibrium (the one yielding the higher payoff).
 		"""
-		pure_nash = self.analysis.get("pure_nash", [])
+		pure_nash = self.analysis.get("pure_nash")
 		
 		# Safety check: Hawk/Dove logic requires exactly 2 Nash equilibria
 		if len(pure_nash) != 2:
@@ -885,23 +885,19 @@ class MyAgent(Agent):
 		
 		# 1. Extract my action and the opponent's action for both equilibria
 		# The pure_nash tuples are always structured as (row_action, col_action)
-		if self.player_id == 0:  # We are the Row player
-			my_act1, opp_act1 = nash1
-			my_act2, opp_act2 = nash2
-		else:                    # We are the Column player
-			opp_act1, my_act1 = nash1
-			opp_act2, my_act2 = nash2
-			
-		# 2. Look up the payoffs for these specific outcomes in our payoff matrix
-		payoff1 = self.my_payoffs[my_act1, opp_act1]
-		payoff2 = self.my_payoffs[my_act2, opp_act2]
+		if self.my_payoffs[nash1] <= self.my_payoffs[nash2]:  # Welke nash is beter voor jou
+			if self.player_id == 0:
+				action = nash2[0] #je bent row dus je wil deze action van deze nash
+			else:
+				action = nash2[1] # andersom
 		
-		# 3. Choose the action that corresponds to the highest payoff
-		if payoff1 >= payoff2:
-			return my_act1
-		else:
-			return my_act2
-				
+		elif self.my_payoffs[nash1] >= self.my_payoffs[nash2]:
+			if self.player_id == 0:
+				action = nash2[1] #je bent column dus je wil deze action van deze nash
+			else:
+				action = nash2[0] # andersom
+			
+		return action				
 	
 	def _normal_cdf(self, x):
 		return 0.5 * (1 + np.erf(x / np.sqrt(2)))
